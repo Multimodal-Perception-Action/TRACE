@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "public_release_approved": true,
+  "approval_notes": "The project owner confirmed public redistribution of derived models and generated examples on 2026-10-09. Project-owned code and released artifacts use Apache-2.0; third-party training data is excluded.",
+  "repositories": {
+    "code": "https://github.com/Multimodal-Perception-Action/TRACE",
+    "model": "kangzejian/TRACE",
+    "dataset": "kangzejian/TRACE-Inference-Assets"
+  },
+  "artifacts": [
+    {
+      "repo_type": "model",
+      "path": "generator.pt",
+      "destination": "models/generator.pt",
+      "bytes": 130105739,
+      "sha256": "ed64564788fcc9b9384944e84e54afe3536c309a6f96d1d0732c083d9e21b011"
+    },
+    {
+      "repo_type": "model",
+      "path": "generator_boundary.pt",
+      "destination": "models/generator_boundary.pt",
+      "bytes": 130683475,
+      "sha256": "45733c5ce6cebbfc9aac90b5365231a270f091c4192c0cf2914c0b8ea02eca76"
+    },
+    {
+      "repo_type": "model",
+      "path": "planner_adapter/adapter_config.json",
+      "destination": "models/planner_adapter/adapter_config.json",
+      "bytes": 1105,
+      "sha256": "4c4f8f3e60dee1411a71cd9aeb13b04cfc92798c2851bff1f819f4f63ebe1c67"
+    },
+    {
+      "repo_type": "model",
+      "path": "planner_adapter/adapter_model.safetensors",
+      "destination": "models/planner_adapter/adapter_model.safetensors",
+      "bytes": 264308896,
+      "sha256": "7357e17a1859197eff3974a29491f1ede0987bacf60dfd1cc736f094ad23c441"
+    },
+    {
+      "repo_type": "dataset",
+      "path": "generation_stats.npz",
+      "destination": "models/generation_stats.npz",
+      "bytes": 1070,
+      "sha256": "efc288dddf549ab58460e3ab72b4be39779d785a5835b585aad0e3e667dc74bf"
+    },
+    {
+      "repo_type": "dataset",
+      "path": "standing_pose35.npy",
+      "destination": "models/standing_pose35.npy",
+      "bytes": 408,
+      "sha256": "d795b72cd4dfe0b74519afcf4f74cb164c315c79337da7eaef8ce33a8a726ce8"
+    },
+    {
+      "repo_type": "dataset",
+      "path": "example_prompts.jsonl",
+      "destination": "data/example_prompts.jsonl",
+      "bytes": 372,
+      "sha256": "8a8b934aaa2ff35f4c11de030af35b3c44a484ee05079915272c08abd7ef20b7"
+    }
+  ],
+  "upstream": [
+    {
+      "repo_id": "Qwen/Qwen3-4B-Instruct-2507",
+      "destination": "models/planner_base",
+      "revision": "master"
+    },
+    {
+      "repo_id": "Qwen/Qwen3-Embedding-4B",
+      "destination": "models/text_embedding",
+      "revision": "master"
+    }
+  ]
+}

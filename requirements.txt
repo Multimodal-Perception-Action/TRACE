@@ -1,0 +1,10 @@
+# 与验证环境一致；PyTorch 在 install.sh 中单独选择 CUDA 或 CPU wheel。
+transformers==5.12.1
+peft==0.19.1
+accelerate==1.14.0
+numpy==2.2.6
+scipy==1.15.3
+safetensors==0.8.0
+huggingface-hub==1.26.1
+tokenizers==0.22.2
+-r requirements-render.txt

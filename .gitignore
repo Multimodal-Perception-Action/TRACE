@@ -1,0 +1,17 @@
+.git/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.cache/
+models/
+data/
+outputs/
+publish/
+dist/
+*.log
+.env
+.env.*
+*.key
+*.pem
+*.token
