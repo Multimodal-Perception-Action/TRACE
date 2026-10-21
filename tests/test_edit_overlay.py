@@ -33,7 +33,7 @@ class OverlayTests(unittest.TestCase):
                 render_edit_overlay.main()
             self.assertEqual(render.call_args.kwargs["edit_directory"], directory)
             self.assertEqual(render.call_args.args[1]["instruction"], "Can you jump higher?")
-            self.assertIn("height target", render.call_args.args[1]["method_label"])
+            self.assertIn("relative target", render.call_args.args[1]["method_label"])
             compose.assert_called_once()
 
     def test_before_priority_colors(self):

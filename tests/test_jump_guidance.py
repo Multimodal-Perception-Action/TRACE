@@ -37,9 +37,17 @@ class JumpGuidanceTests(unittest.TestCase):
         raw, mask = self.source(False)
         with self.assertRaisesRegex(ValueError, "detectable source jump"):
             JumpHeightGuidance(raw, np.zeros(40), np.ones(40), mask, [12, 48], 10)
-        for gain in (0, -1, 26):
+        for gain in (0, -26, 26, float("nan"), float("inf")):
             with self.assertRaises(ValueError):
                 JumpHeightGuidance(raw, np.zeros(40), np.ones(40), mask, [12, 48], gain)
+
+    def test_lower_jump_uses_current_source(self):
+        raw, mask = self.source()
+        guidance = JumpHeightGuidance(raw, np.zeros(40), np.ones(40), mask, [12, 48], -3)
+        self.assertAlmostEqual(guidance.target, .05, places=5)
+        self.assertEqual(guidance.report["gain_cm"], -3)
+        with self.assertRaisesRegex(ValueError, "Target sole clearance"):
+            JumpHeightGuidance(raw, np.zeros(40), np.ones(40), mask, [12, 48], -8)
 
     def test_height_geometry_matches_renderer(self):
         poses = np.zeros((3, 35), np.float32)

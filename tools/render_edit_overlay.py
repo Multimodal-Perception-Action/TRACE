@@ -329,7 +329,7 @@ def main():
         case = dict(id=directory.name, title="Motion editing", instruction=request["instruction"],
                     method="experimental" if experimental else "trained")
         if result.get("numerical_guidance"):
-            case["method_label"] = "Reference-guided generation + height target"
+            case["method_label"] = "Reference-guided generation + relative target"
         cases = [case] if not args.case or args.case == case["id"] else []
         root = directory.parent
     else:

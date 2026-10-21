@@ -171,6 +171,105 @@ Use the edited SPS as the next call's source for another supported request.
 `--editor-checkpoint` and `--editing-stats` allow compatible editor weights;
 the generation checkpoint argument does not change the editor.
 
+## Conversational editing
+
+`converse.py` keeps a persistent session so a follow-up contains only the change:
+
+```bash
+bash run.sh --text "Briefly bow forward, then return to standing." \
+  --contact-refine none --output outputs/bow
+.venv/bin/python converse.py --source outputs/bow \
+  --session outputs/bow_chat \
+  --instruction "Bow more deeply, keeping the arm movements unchanged."
+.venv/bin/python converse.py --session outputs/bow_chat \
+  --instruction "Make the bow a little shallower."
+```
+
+The first call reads the caption from the generation directory's `request.json`.
+For an external SPS without metadata, provide `--source-text` once. Later calls
+must omit `--source` and reuse the same session. A compatible
+`--generator-checkpoint` can be selected on the first call; weights and
+normalization statistics are hashed and fixed for that session.
+
+The data flow is:
+
+```text
+Latest motion + remembered caption + dialogue + new instruction
+    → instruction-tuned Qwen base → typed relative intent + revised caption
+    → measured source geometry + scope/target compiler
+    → event-planner adapter + text embedding
+    → source-noised diffusion + reference projection → updated motion
+```
+
+The instruction parser uses the shipped Qwen base without the event-only adapter.
+The revised caption then goes through the existing event-planner adapter. These
+are sequential inference stages, not newly trained model weights. The full
+caption is now internal; users do not need to rewrite the action each turn.
+
+Supported measured relative requests include jump height, kick/knee height,
+crouch/lunge depth, and torso-bow angle. Duration, global travel, heading, and endpoint
+poses remain fixed. Hand edits use the separate `edit.py` interface above.
+Unsupported/ambiguous requests fail explicitly and do not advance the session.
+
+For jump requests, FK measures the current source's lowest sole-point height
+against the fixed ground. The compiler selects a unique jump or an apex with
+at least twice the clearance of any competing jump in the requested region.
+Comparable multiple jumps require a more specific time region. The edit window
+covers take-off and landing without releasing the protected endpoint bands.
+Jump edits release root height and both legs, preserving torso and arm rotations.
+These are local-coordinate guarantees; world-space upper-body positions follow
+the changed root height.
+
+An unspecified jump magnitude uses a transparent policy: slight = 5 cm,
+moderate = 10 cm, large = 14 cm. Direction is relative to the latest measured
+source. Explicit distances replace the policy. Each change is limited to 25 cm;
+the target sole clearance must stay within 2–45 cm and fit the unchanged duration.
+These limits are inference guardrails, not physical-execution guarantees.
+Numerical jump targets act inside denoising; no post-smoothing or external IK is
+applied. Qualitative body-style edits use text/Plan conditions without a numerical
+goal and may not realize the requested change.
+
+### Source-relative crouch height
+
+For an existing squat/crouch, `converse.py` measures the source pelvis-height
+trajectory. "Crouch more deeply" lowers the measured minimum; "make the squat
+shallower" raises it. Unspecified magnitudes use 3 cm for slight, 5 cm for
+moderate, and 8 cm for large requests. Explicit distances replace these defaults.
+The changed height follows the source crouch envelope, with zero change at the
+protected boundaries. Each new turn measures its actual incoming motion again.
+
+```bash
+.venv/bin/python converse.py --source outputs/squat \
+  --session outputs/squat_chat --instruction "Crouch 5 cm deeper."
+.venv/bin/python converse.py --session outputs/squat_chat \
+  --instruction "Make the squat 3 cm shallower."
+```
+
+During late denoising, the sampler projects root height onto this relative
+trajectory and optimizes leg coordinates using differentiable four-point sole
+FK, contact height, penetration, joint-range excess and temporal-correction
+losses. Root planar motion, orientation, waist, arms and endpoint bands stay
+protected. Upper-body world positions follow the changed root height; their
+local rotations stay fixed. No additional post-smoothing is applied.
+
+This is inference-time kinematic optimization with the existing checkpoint,
+not a newly trained squat editor or a dynamics controller. Changes are limited
+to 15 cm, the target pelvis height to 30–100 cm, and shallower requests must
+retain at least 3 cm of measured crouch depth. Sources without a detectable
+crouch, or windows that clip its minimum, are rejected. `result.json` reports
+the requested/achieved height and sole-reference error for checking feasibility.
+An output exceeding 0.1 cm root-profile error or 2.5 cm per-coordinate sole
+reference RMSE is rejected before the session advances. This is a kinematic
+sanity check, not a guarantee of simulator or robot stability.
+
+`session.json` points to the latest completed output. Each numbered turn retains
+`context.json`, the raw language response, `intent.json`, `compiled_edit.json`,
+and the motion/overlay files. A schema error permits one logged language retry;
+it is never replaced by a hardcoded semantic answer. Generation failure leaves
+the preceding reference unchanged. Rendering failure is recorded separately
+after a valid motion has been committed. A session lock prevents concurrent
+turns from accidentally editing the same stale reference.
+
 ## Additional qualitative editing trials
 
 `tools/run_edit_showcase.py` runs six newly generated sources and ten actual
@@ -288,3 +387,43 @@ trials. `tools/review_jump_edit.py` renders original / previous / improved
 motions with a shared camera and produces a synchronized comparison plus a
 source-priority overlay. No post-edit smoothing, motion retiming, or render-time
 trajectory correction is used.
+### Measured relative edits
+
+Follow-up requests are interpreted relative to the **latest exported source motion**,
+not the previous requested target. The conversational interface supports the
+following measured attributes:
+
+| Request | Measurement | Edited coordinates |
+| --- | --- | --- |
+| Kick higher / lower | Selected foot's mean sole-point height | Selected leg |
+| Lift the knee more / less | Selected knee center height | Selected leg |
+| Crouch or lunge deeper / shallower | Minimum pelvis height | Pelvis height and both legs |
+| Bow deeper / shallower | Heading-relative torso forward angle | Pelvis tilt and both legs |
+
+The default slight, moderate and large changes are 3, 5 and 8 cm for leg/pelvis
+height, or 3, 5 and 8 degrees for bowing. Explicit amounts override these defaults
+within the validated range. Jump-height editing retains its separate flight-height
+policy. Deeper crouches/lunges **lower** the pelvis; deeper bows **increase** the
+forward angle. A tapered source-event envelope applies the signed change while
+keeping endpoint poses and event timing fixed.
+
+```bash
+python converse.py --source outputs/kick --session outputs/kick_edit \
+  --instruction "Kick higher with the right leg, keeping the arm movements unchanged."
+python converse.py --session outputs/kick_edit \
+  --instruction "Make it a little lower."
+```
+
+The diffusion sampler uses differentiable kinematic guidance and reference
+projection. This is an inference-time optimization, not a newly trained editor.
+It preserves protected **local joint rotations**; world-space upper-body positions
+can change when the pelvis moves or tilts. Bowing includes leg compensation to
+retain the sole reference and removes residual yaw from optimized tilt coordinates.
+Length and angle targets are serialized separately as `amount_cm` and `amount_deg`.
+
+Source validation rejects motions without the requested measurable event. Output
+validation checks target direction, target error, penetration and, for bowing,
+sole-reference error before advancing the session. A source that barely lifts its
+knee cannot meaningfully demonstrate a lower-knee edit. Rejected requests retain
+the original motion and their diagnostic record. These checks establish kinematic
+edit behavior; they do not establish dynamic stability or real-robot feasibility.

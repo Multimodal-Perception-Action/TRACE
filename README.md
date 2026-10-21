@@ -1,14 +1,41 @@
-# TRACE
+<h1 align="center">TRACE</h1>
 
-**Typed Reference-Aware Conversational Editing for Humanoid Motion Diffusion**
+<p align="center">
+  <strong>Typed Reference-Aware Conversational Editing<br>for Humanoid Motion Diffusion</strong>
+</p>
 
-[arXiv](https://arxiv.org/abs/2610.21515) · [PDF](https://arxiv.org/pdf/2610.21515) · [Models](https://modelscope.cn/models/kangzejian/TRACE) · [Inference assets](https://modelscope.cn/datasets/kangzejian/TRACE-Inference-Assets) · [Training](docs/TRAINING.md) · [Citation](#citation)
+<p align="center">
+  <a href="https://arxiv.org/abs/2610.21515"><img src="https://img.shields.io/badge/arXiv-2610.21515-B31B1B?style=flat-square&amp;logo=arxiv&amp;logoColor=white" alt="arXiv: 2610.21515" height="24"></a>
+  <a href="https://modelscope.cn/models/kangzejian/TRACE"><img src="https://img.shields.io/badge/ModelScope-Models-2563EB?style=flat-square" alt="ModelScope models" height="24"></a>
+  <a href="https://modelscope.cn/datasets/kangzejian/TRACE-Inference-Assets"><img src="https://img.shields.io/badge/Resources-Inference_Assets-0F766E?style=flat-square" alt="Inference assets" height="24"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-64748B?style=flat-square" alt="Apache 2.0 license" height="24"></a>
+</p>
+
+<p align="center">
+  <a href="#installation">Get started</a> &nbsp;·&nbsp;
+  <a href="#generate-motion">Generate</a> &nbsp;·&nbsp;
+  <a href="#edit-motion">Edit</a> &nbsp;·&nbsp;
+  <a href="docs/TRAINING.md">Train</a> &nbsp;·&nbsp;
+  <a href="https://arxiv.org/pdf/2610.21515">Paper PDF</a> &nbsp;·&nbsp;
+  <a href="#citation">Cite</a>
+</p>
+
+---
+
+## Overview
 
 TRACE generates and edits Unitree G1 humanoid motion from language. An LLM predicts duration and sparse motion events; a diffusion Transformer combines this time-aligned Plan with the original text to generate a continuous trajectory. Reference-aware editing changes selected motion components while preserving local joint rotations outside the editing scope.
 
-![TRACE method](media/method.png)
+<p align="center">
+  <img src="media/method.png" alt="TRACE overview: motion-grounded event planning, conditioned diffusion, and reference-aware editing" width="100%">
+</p>
 
-Motion-derived events supervise the language planner during training. At inference, the planner predicts events from text without access to a target motion. [Method details](docs/PAPER_OVERVIEW.md) · [Figure PDF](media/method.pdf)
+Motion-derived events supervise the language planner during training. At inference, the planner predicts events from text without access to a target motion.
+
+<p align="center">
+  <a href="docs/PAPER_OVERVIEW.md">Method details</a> &nbsp;·&nbsp;
+  <a href="media/method.pdf">High-resolution figure</a>
+</p>
 
 ## Real-robot demonstrations
 
@@ -55,22 +82,33 @@ bash run.sh \
 
 The output directory must be new. This example uses the boundary-capable generator without start/end pose constraints. The pipeline is:
 
-`text → LLM Plan + text embedding → diffusion with optional pose conditions → smoothing → heel/toe refinement → SPS + video`
+```text
+Text → LLM Plan + text embedding → diffusion with optional pose conditions
+     → smoothing + heel/toe refinement → SPS + video
+```
 
 Omit `--boundary free` to use the bundled [start](examples/poses/idle_start.sps) and [end](examples/poses/idle_end.sps) idle references by default. The next example supplies these references explicitly for the same walking prompt.
+
+<details>
+<summary><strong>Output files</strong></summary>
 
 - `motion_final.sps`: final 20 FPS motion for downstream use.
 - `motion_raw.sps`: diffusion output before postprocessing.
 - `pose35_final.npy`, `motion_final_qpos.npz`: array exports.
 - `motion_smoothed.mp4`, `preview.png`, `index.html`: visualization of the final motion; the video filename is retained for compatibility.
 
-Useful options:
+</details>
+
+<details>
+<summary><strong>Useful options</strong></summary>
 
 - `--boundary free`: use the same boundary-capable model without start/end constraints.
 - `--boundary none`: use the original generator without boundary conditioning.
 - `--contact-refine none`: disable contact refinement; smoothing remains enabled.
 - `--device cuda:0 --render-device 0`: select the inference and rendering GPU.
 - `--skip-render`: export motion without rendering.
+
+</details>
 
 ### Walking with start and end poses
 
@@ -89,40 +127,55 @@ Start and end poses can come from different files. Compatible generation checkpo
 
 ## Edit motion
 
-### Make a jumping jack higher
+### Edit through follow-up instructions
 
-First generate the source motion, then edit that motion with a higher-jump request:
+First generate a bow using the bundled start and end idle poses:
 
 ```bash
 bash run.sh \
-  --text "Perform a jumping jack." \
-  --output outputs/jumping_jack
-
-.venv/bin/python tools/experimental_reference_edit.py \
-  --source outputs/jumping_jack/motion_final.sps \
-  --instruction "Can you jump higher?" \
-  --text "A person performs a high jumping jack, jumping well above the ground, then returns to standing." \
-  --body lower_body --active-span 8 35 --height-gain-cm 14 \
-  --strength 0.65 --cfg 3 \
-  --output outputs/jump_edit
+  --text "Briefly bow forward, then return to standing." \
+  --contact-refine none \
+  --output outputs/bow
 ```
 
-This example reuses `generator_boundary.pt` for reference-guided editing with a revised caption and Plan. The numerical height target is supplied explicitly and applied during denoising; it is not inferred from the follow-up sentence. `--active-span 8 35` is the zero-based, half-open editing interval for this example. For other source clips, choose an interval containing take-off, flight, and landing while excluding the idle endpoints.
+Then request **Bow more deeply**, without rewriting the original action:
 
-Outputs include `motion_edited.sps` and before/after videos. This jump-height mode preserves endpoint poses and upper-body local joint rotations; root height and leg joints can change. No post-smoothing or external IK is applied to the edited motion.
+```bash
+.venv/bin/python converse.py \
+  --source outputs/bow \
+  --session outputs/bow_chat \
+  --instruction "Bow more deeply, keeping the arm movements unchanged." \
+  --render-device 0
+```
+
+For the next turn, provide **only the requested change** and the session location:
+
+```bash
+.venv/bin/python converse.py \
+  --session outputs/bow_chat \
+  --instruction "Make the bow a little shallower."
+```
+
+The session remembers the source description, dialogue, and latest completed motion. The language frontend produces the revised caption and typed edit; the compiler resolves its body/time scope and numerical target from the current motion. Every turn edits the **previous turn's output**, not the initial clip. No separate `--text`, `--body`, or frame interval is needed. You can also start a session from your own generated output directory; its caption is read automatically.
+
+For bowing, the target is relative to the measured current torso forward angle: deeper increases it and shallower reduces it. Unspecified strengths use slight = 3°, moderate = 5°, and large = 8°; an explicit angle replaces this default. The interface also supports relative jump height, kick/knee height, and crouch/lunge depth. See [conversation behavior and supported scopes](docs/REFERENCES_AND_EDITING.md#conversational-editing).
+
+Each completed turn saves `edit/motion_edited.sps`, its interpreted request, and an overlay video under `outputs/bow_chat/turns/`. **Blue is Before; translucent orange is After**, aligned in time and world coordinates. Add `--skip-render` to export motion only.
+
+Bowing preserves endpoint poses, root translation and heading, and waist/arm local joint rotations. Pelvis tilt and leg coordinates adapt together to realize the angle change while retaining the sole reference. This uses reference-guided diffusion with in-sampling kinematic optimization, without an additional post-smoothing stage. Requests that fail source or output checks leave the current motion unchanged.
 
 <details>
-<summary>Optional: render a local before/after overlay</summary>
+<summary><strong>Optional: render a local before/after overlay</strong></summary>
 
 Render both motions together, with **Before in blue** and **After in translucent orange**:
 
 ```bash
 .venv/bin/python tools/render_edit_overlay.py \
-  --edit outputs/jump_edit --output outputs/jump_overlay \
+  --edit outputs/bow_chat/turns/001/edit --output outputs/bow_overlay \
   --priority before
 ```
 
-The synchronized overlay is saved to `outputs/jump_overlay/jump_edit/overlay.mp4`. Overlapping pixels show Before preferentially, without shifting or retiming either motion.
+The synchronized overlay is saved to `outputs/bow_overlay/edit/overlay.mp4`. Overlapping pixels show Before preferentially, without shifting or retiming either motion.
 
 </details>
 
@@ -134,7 +187,13 @@ This generator-based path is experimental. The separate `edit.py` entry point su
 
 Obtain motion files and annotations from the dataset provider under its license. Split lists contain filenames only, with no motion arrays, captions, or actor metadata.
 
-The paper's split lists are included: [train](splits/bones_seed/train.jsonl) (84,287), [validation](splits/bones_seed/val.jsonl) (13,293), and [test](splits/bones_seed/test.jsonl) (13,302). See [split usage](splits/bones_seed/README.md) to match these filenames to your local data.
+The paper's filename-only split lists are included:
+
+| Training | Validation | Test |
+| :---: | :---: | :---: |
+| [84,287 entries](splits/bones_seed/train.jsonl) | [13,293 entries](splits/bones_seed/val.jsonl) | [13,302 entries](splits/bones_seed/test.jsonl) |
+
+See [split usage](splits/bones_seed/README.md) to match these filenames to your local data.
 
 ## Tests
 

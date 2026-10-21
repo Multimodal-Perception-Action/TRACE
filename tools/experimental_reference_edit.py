@@ -99,12 +99,16 @@ def infer(config, output):
             raise ValueError("Edit span must be inside the unprotected source interval")
         mask[:start] = False
         mask[end:] = False
-    if config.get("height_gain_cm") is not None:
+    if config.get("height_gain_cm") is not None or config.get("pelvis_delta_cm") is not None:
         # A vertical jump edit needs root height and both legs, not a different
         # upper-body celebration. Preserve the source tilt, waist and arms.
         mask[:, 5:11] = False
         mask[:, 23:] = False
-    mean, std = load_stats(Path(config["models"]) / "generation_stats.npz")
+    if config.get('relative_attribute') is not None:
+        from trace_core.relative_attribute_guidance import relative_attribute_mask
+        mask = relative_attribute_mask(n, config['active_span'], config['relative_attribute'],
+                                       1 if config['body'] == 'right_leg' else 0)
+    mean, std = load_stats(Path(config.get("generation_stats", Path(config["models"]) / "generation_stats.npz")))
     state = torch.load(config["checkpoint"], map_location="cpu", weights_only=True)
     if state["format"] != "boundary_events_v1":
         raise ValueError("This experimental path requires a boundary-conditioned generator")
@@ -135,8 +139,26 @@ def infer(config, output):
             raise ValueError("Jump targets require an explicit active interval")
         guidance = JumpHeightGuidance(source, mean, std, editable,
                                       config["active_span"], config["height_gain_cm"])
+    if config.get("pelvis_delta_cm") is not None:
+        from trace_core.crouch_guidance import CrouchDepthGuidance
+        if config.get("height_gain_cm") is not None or config.get("active_span") is None:
+            raise ValueError("Crouch guidance needs one target and an explicit active interval")
+        guidance = CrouchDepthGuidance(source, mean, std, editable,
+                                       config["active_span"], config["pelvis_delta_cm"])
+        np.save(output / "target_root_height_cm.npy", guidance.target_cm.cpu().numpy())
+    if config.get('relative_attribute') is not None:
+        from trace_core.relative_attribute_guidance import RelativeAttributeGuidance
+        guidance = RelativeAttributeGuidance(source, mean, std, editable, config['active_span'],
+            config['relative_attribute'], 1 if config['body'] == 'right_leg' else 0, config['attribute_delta'])
+        np.save(output/'target_attribute.npy', guidance.target.cpu().numpy())
     sampled = resample(model, diff, batch, source, editable, config["strength"],
                        config["steps"], config["cfg"], config["seed"], guidance=guidance)
+    if config.get("pelvis_delta_cm") is not None:
+        from trace_core.crouch_guidance import validate_crouch_report
+        validate_crouch_report(guidance.report)
+    if config.get('relative_attribute') is not None:
+        from trace_core.relative_attribute_guidance import validate_attribute_report
+        validate_attribute_report(guidance.report)
     result = np.where(mask, sampled[0].cpu().numpy()*std+mean, raw).astype(np.float32)
     if not np.isfinite(result).all():
         raise ValueError("Non-finite motion output")
@@ -162,6 +184,7 @@ def infer(config, output):
         body=config["body"], strength=config["strength"], postprocessing=False, ik=False,
         active_span=config.get("active_span"),
         numerical_guidance=guidance.report if guidance else None,
+        in_sampling_kinematic_optimization=guidance is not None,
         protected_encoded_coordinates_exact=True, idle_bands_exact=True,
         note="Pipeline completion, not an assessment of edit success. No new editor training."))
 
@@ -173,6 +196,8 @@ def main():
     parser.add_argument("--instruction", help="Follow-up instruction for the comparison caption")
     parser.add_argument("--body", choices=["lower_body", "right_leg", "left_leg", "torso", "whole_body"])
     parser.add_argument("--models", type=Path, default=ROOT / "models")
+    parser.add_argument("--generator-checkpoint", type=Path)
+    parser.add_argument("--generation-stats", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--strength", type=float, default=.45)
     parser.add_argument("--steps", type=int, default=50)
@@ -182,6 +207,10 @@ def main():
                         help="Optional half-open source-frame interval for local editing")
     parser.add_argument("--height-gain-cm", type=float,
                         help="Experimental numerical jump-height guidance during denoising")
+    parser.add_argument("--pelvis-delta-cm", type=float,
+                        help="Source-relative crouch height change: negative deeper, positive shallower")
+    parser.add_argument('--relative-attribute', choices=['kick_height', 'knee_height', 'bow_angle'])
+    parser.add_argument('--attribute-delta', type=float, help='Signed relative cm, or degrees for bow_angle')
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--render-device", type=int, default=0)
@@ -200,6 +229,14 @@ def main():
         return
     if not all((args.source, args.text, args.body, args.instruction)):
         parser.error("--source, --text, --instruction and --body are required")
+    if args.pelvis_delta_cm is not None and (args.height_gain_cm is not None or args.body != "lower_body"):
+        parser.error("--pelvis-delta-cm requires lower_body and cannot be combined with jump guidance")
+    if args.relative_attribute is not None:
+        body_ok = args.body == 'torso' if args.relative_attribute == 'bow_angle' else args.body in {'left_leg', 'right_leg'}
+        if not body_ok or args.attribute_delta is None or args.active_span is None or args.height_gain_cm is not None or args.pelvis_delta_cm is not None:
+            parser.error('Relative attributes need a matching body, signed delta, explicit span and no other numerical target')
+    elif args.attribute_delta is not None:
+        parser.error('--attribute-delta requires --relative-attribute')
     if not .01 <= args.strength <= .8 or not 1 <= args.steps <= 1000:
         parser.error("Strength must be in [0.01,0.8] and steps in [1,1000]")
     import numpy as np
@@ -215,7 +252,7 @@ def main():
         parser.error("Source must have 20..512 frames")
     make_mask(len(pose), args.body, args.boundary_frames)
     models = args.models.resolve()
-    checkpoint = models / "generator_boundary.pt"
+    checkpoint = (args.generator_checkpoint or models / "generator_boundary.pt").resolve()
     output.mkdir(parents=True, exist_ok=False)
     np.save(output / "source_pose35.npy", pose)
     write_sps(output / "source.sps", pose, fps=20)
@@ -224,7 +261,10 @@ def main():
         source_sha256=sha256(args.source), strength=args.strength, steps=args.steps,
         cfg=args.cfg, seed=args.seed, boundary_frames=args.boundary_frames, device=args.device,
         cpu_threads=4, experimental=True, active_span=args.active_span,
-        height_gain_cm=args.height_gain_cm)
+        height_gain_cm=args.height_gain_cm,
+        pelvis_delta_cm=args.pelvis_delta_cm,
+        relative_attribute=args.relative_attribute, attribute_delta=args.attribute_delta,
+        generation_stats=str((args.generation_stats or models / "generation_stats.npz").resolve()))
     save(output / "request.json", config)
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)

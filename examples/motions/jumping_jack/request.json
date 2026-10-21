@@ -1,0 +1,10 @@
+{
+  "text": "Perform a jumping jack.",
+  "source_kind": "generated_paper_demonstration_reference",
+  "source_id": "demo_show_001",
+  "frames": 44,
+  "fps": 20,
+  "source_sha256": "3c1a08b3e850e252dfb780cda5383d415af5b490dfa2846be705533af78d40bc",
+  "test_split_id": null,
+  "instruction_for_edit_example": "Can you jump higher?"
+}

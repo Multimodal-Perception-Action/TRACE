@@ -10,8 +10,8 @@ from .editor_geometry import G1SoleForwardKinematics
 
 class JumpHeightGuidance:
     def __init__(self, source, mean, std, editable, active_span, gain_cm, fps=20):
-        if not 0 < gain_cm <= 25:
-            raise ValueError("Experimental jump gains must be in (0, 25] cm")
+        if not math.isfinite(gain_cm) or not 0 < abs(gain_cm) <= 25:
+            raise ValueError("Experimental signed jump changes must have magnitude in (0, 25] cm")
         self.source = source.detach().clone()
         self.mean = torch.as_tensor(mean, device=source.device).float()[None, None]
         self.std = torch.as_tensor(std, device=source.device).float()[None, None]
@@ -28,6 +28,8 @@ class JumpHeightGuidance:
             if float(clearance[self.peak]) < .02:
                 raise ValueError("A detectable source jump is required; no jump was found")
             self.target = float(clearance[self.peak])+gain_cm/100
+            if not .02 <= self.target <= .45:
+                raise ValueError("Target sole clearance must remain within 2..45 cm")
             self.root_target = float(self.raw_source[0, self.start:self.end, 2].max()/100)+gain_cm/100
             times = (torch.arange(source.shape[1], device=source.device)-self.peak)/fps
             # A short parabolic clearance envelope, not a claim of COM dynamics.
@@ -37,6 +39,8 @@ class JumpHeightGuidance:
             self.flight = ~self.stance
             if self.peak-math.sqrt(2*self.target/9.81)*fps <= self.start+2:
                 raise ValueError("The edit interval is too short for the requested jump")
+            if self.peak+math.sqrt(2*self.target/9.81)*fps >= self.end-2:
+                raise ValueError("The edit interval leaves insufficient landing time")
         self.report = dict(
             type="in_denoising_differentiable_FK_jump_target",
             gain_cm=gain_cm, source_apex_frame=self.peak,

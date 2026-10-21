@@ -71,7 +71,7 @@ class PackagedExamplesTests(unittest.TestCase):
         block = re.search(r"```bibtex\n(.*?)\n```", readme, re.S)
         self.assertIsNotNone(block)
         self.assertEqual(block.group(1).strip(), (ROOT / "CITATION.bib").read_text().strip())
-        self.assertIn("[arXiv](https://arxiv.org/abs/2610.21515)", readme)
+        self.assertRegex(readme, r'(?:\[arXiv\]\(https://arxiv\.org/abs/2610\.21515\)|<a href="https://arxiv\.org/abs/2610\.21515">)')
 
 
 if __name__ == "__main__":

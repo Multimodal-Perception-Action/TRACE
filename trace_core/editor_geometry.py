@@ -150,6 +150,10 @@ class G1SoleForwardKinematics(nn.Module):
 
     def forward(self, motion40: Tensor, frame_mask: Tensor) -> Tensor:
         """Return sole points with shape ``[B,T,2 feet,4 points,3 xyz]``."""
+        return self.landmarks(motion40, frame_mask)["feet"]
+
+    def landmarks(self, motion40: Tensor, frame_mask: Tensor) -> dict[str, Tensor]:
+        """Return sole corners, knee centers and heading-relative torso pitch."""
         if motion40.ndim != 3 or motion40.shape[-1] != FEATURE_DIM:
             raise ValueError(f"expected [B,T,{FEATURE_DIM}] gravity-gauge motion")
         if frame_mask.shape != motion40.shape[:2]:
@@ -167,6 +171,7 @@ class G1SoleForwardKinematics(nn.Module):
         # trigonometric FK below are radians.
         leg_angles = torch.deg2rad(leg_angles)
         feet: list[Tensor] = []
+        knees: list[Tensor] = []
         for side in range(2):
             position = root_position
             rotation = root_rotation
@@ -175,6 +180,8 @@ class G1SoleForwardKinematics(nn.Module):
                 position = position + torch.matmul(
                     rotation, offset.reshape(1, 1, 3, 1)
                 ).squeeze(-1)
+                if joint == 3:
+                    knees.append(position)
                 rotation = torch.matmul(
                     rotation, self.static_rotations[side, joint]
                 )
@@ -188,7 +195,13 @@ class G1SoleForwardKinematics(nn.Module):
                 "btij,pj->btpi", rotation, self.sole_points
             )
             feet.append(points)
-        return torch.stack(feet, dim=2)
+        torso = root_rotation
+        for index, axis in ((23, 2), (24, 0), (25, 1)):
+            torso = torso @ _principal_axis_rotation(torch.deg2rad(motion40[..., index]), axis)
+        up = torso[..., :, 2]
+        forward_up = up[..., 0]*torch.cos(root["yaw"])+up[..., 1]*torch.sin(root["yaw"])
+        pitch = torch.rad2deg(torch.atan2(forward_up, up[..., 2]))
+        return dict(feet=torch.stack(feet, dim=2), knees=torch.stack(knees, dim=2), torso_pitch_deg=pitch)
 
 def _masked_feature_mean(value: Tensor, mask: Tensor) -> Tensor:
     weight = mask.to(value.dtype)
