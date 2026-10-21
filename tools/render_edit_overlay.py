@@ -103,7 +103,7 @@ def composite_priority(combined, foreground, segmentation, geom_ids, geom_type):
     return result
 
 
-def render_case(root, case, output, device, still_only=False, priority="before"):
+def render_case(root, case, output, device, still_only=False, priority="before", edit_directory=None):
     os.environ["MUJOCO_GL"] = "egl"
     os.environ["PYOPENGL_PLATFORM"] = "egl"
     os.environ["MUJOCO_EGL_DEVICE_ID"] = str(device)
@@ -116,7 +116,7 @@ def render_case(root, case, output, device, still_only=False, priority="before")
     from trace_core.motion_io import SPS_JOINTS
 
     start = time.monotonic()
-    folder = root / "edits" / case["id"]
+    folder = Path(edit_directory) if edit_directory is not None else root / "edits" / case["id"]
     paths = [folder / "source.sps", folder / "motion_edited.sps"]
     sequences = [load_motion(path) for path in paths]
     (before, fps), (after, other_fps) = sequences
@@ -307,7 +307,9 @@ def compose(output, cases):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--input", type=Path, help="Showcase directory with a case manifest")
+    source.add_argument("--edit", type=Path, help="One completed edit directory; no case manifest needed")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--case", help="Render only one case ID")
     parser.add_argument("--device", type=int, default=0)
@@ -319,8 +321,21 @@ def main():
     parser.add_argument("--priority", choices=("before", "after"), default="before",
                         help="Show this robot in front wherever silhouettes overlap")
     args = parser.parse_args()
-    manifest = json.loads((args.input / "manifest.json").read_text())
-    cases = [case for case in manifest["cases"] if not args.case or case["id"] == args.case]
+    if args.edit:
+        directory = args.edit.resolve()
+        request = json.loads((directory / "request.json").read_text())
+        result = json.loads((directory / "result.json").read_text())
+        experimental = result.get("method") == "experimental_generator_reference_resampling"
+        case = dict(id=directory.name, title="Motion editing", instruction=request["instruction"],
+                    method="experimental" if experimental else "trained")
+        if result.get("numerical_guidance"):
+            case["method_label"] = "Reference-guided generation + height target"
+        cases = [case] if not args.case or args.case == case["id"] else []
+        root = directory.parent
+    else:
+        root = args.input.resolve()
+        manifest = json.loads((root / "manifest.json").read_text())
+        cases = [case for case in manifest["cases"] if not args.case or case["id"] == args.case]
     if not cases:
         parser.error("No matching cases")
     if not args.compose_only:
@@ -328,7 +343,7 @@ def main():
             report_path = args.output / case["id"] / "render_report.json"
             if args.resume and not args.still_only and report_path.exists():
                 report = json.loads(report_path.read_text())
-                folder = args.input / "edits" / case["id"]
+                folder = args.edit if args.edit else root / "edits" / case["id"]
                 hashes = [hashlib.sha256((folder / name).read_bytes()).hexdigest()
                           for name in ("source.sps", "motion_edited.sps")]
                 if (report.get("complete") and report.get("overlap_priority") == args.priority
@@ -337,8 +352,8 @@ def main():
                     print(f"Verified existing overlay: {case['id']}", flush=True)
                     continue
                 raise ValueError(f"Existing overlay does not match current request: {case['id']}")
-            render_case(args.input.resolve(), case, args.output.resolve(),
-                        args.device, args.still_only, args.priority)
+            render_case(root, case, args.output.resolve(),
+                        args.device, args.still_only, args.priority, edit_directory=args.edit)
     if not args.still_only and not args.case and not args.no_compose:
         compose(args.output.resolve(), cases)
 

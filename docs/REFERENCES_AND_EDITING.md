@@ -6,12 +6,12 @@ Use `run.py` or `run.sh` with the boundary-conditioned generator:
 
 ```bash
 bash run.sh \
-  --text "A person stands and waves the right hand." \
+  --text "A person walks forward at a steady pace." \
   --generator-checkpoint models/generator_boundary.pt \
   --generation-stats models/generation_stats.npz \
   --start-ref examples/poses/idle_start.sps --start-frame 0 \
   --end-ref examples/poses/idle_end.sps --end-frame 0 \
-  --output outputs/custom_idle
+  --output outputs/walk_idle
 ```
 
 Each reference is optional; an omitted side uses the corresponding bundled SPS

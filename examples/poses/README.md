@@ -9,11 +9,11 @@ Run from the repository root after downloading the model assets:
 
 ```bash
 bash run.sh \
-  --text "A person stands and waves the right hand." \
+  --text "A person walks forward at a steady pace." \
   --generator-checkpoint models/generator_boundary.pt \
   --start-ref examples/poses/idle_start.sps --start-frame 0 \
   --end-ref examples/poses/idle_end.sps --end-frame 0 \
-  --output outputs/custom_idle
+  --output outputs/walk_idle
 ```
 
 These references are supplied with the code and are used by default; no additional pose download is needed. Explicit reference arguments replace the corresponding endpoint without modifying either bundled file. Compatible generator checkpoints can be selected independently of these files.

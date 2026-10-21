@@ -44,17 +44,20 @@ The downloader checks TRACE artifact sizes and SHA-256 hashes. It also obtains t
 
 ## Generate motion
 
+### Walking without endpoint constraints
+
 ```bash
 bash run.sh \
   --text "A person walks forward at a steady pace." \
+  --boundary free \
   --output outputs/walk
 ```
 
-The output directory must be new. The default pipeline is:
+The output directory must be new. This example uses the boundary-capable generator without start/end pose constraints. The pipeline is:
 
-`text → LLM Plan + text embedding → boundary-conditioned diffusion → smoothing → heel/toe refinement → SPS + video`
+`text → LLM Plan + text embedding → diffusion with optional pose conditions → smoothing → heel/toe refinement → SPS + video`
 
-By default, both endpoints use the bundled [start](examples/poses/idle_start.sps) and [end](examples/poses/idle_end.sps) idle references. These are the same posture. No extra reference arguments are needed for the walking example above.
+Omit `--boundary free` to use the bundled [start](examples/poses/idle_start.sps) and [end](examples/poses/idle_end.sps) idle references by default. The next example supplies these references explicitly for the same walking prompt.
 
 - `motion_final.sps`: final 20 FPS motion for downstream use.
 - `motion_raw.sps`: diffusion output before postprocessing.
@@ -69,33 +72,61 @@ Useful options:
 - `--device cuda:0 --render-device 0`: select the inference and rendering GPU.
 - `--skip-render`: export motion without rendering.
 
-### Custom start and end poses
+### Walking with start and end poses
 
 Ready-to-use SPS references are included: [start pose](examples/poses/idle_start.sps) and [end pose](examples/poses/idle_end.sps). Both contain the same single-frame G1 idle pose; replace either file to use different endpoints.
 
 ```bash
 bash run.sh \
-  --text "A person stands and waves the right hand." \
+  --text "A person walks forward at a steady pace." \
   --generator-checkpoint models/generator_boundary.pt \
   --start-ref examples/poses/idle_start.sps --start-frame 0 \
   --end-ref examples/poses/idle_end.sps --end-frame 0 \
-  --output outputs/custom_idle
+  --output outputs/walk_idle
 ```
 
 Start and end poses can come from different files. Compatible generation checkpoints can be selected independently of the references. [Reference formats and checkpoint compatibility](docs/REFERENCES_AND_EDITING.md)
 
 ## Edit motion
 
+### Make a jumping jack higher
+
+First generate the source motion, then edit that motion with a higher-jump request:
+
 ```bash
-.venv/bin/python edit.py \
-  --source outputs/walk/motion_final.sps \
-  --instruction "Raise the right hand by 8 cm during the middle half." \
-  --output outputs/hand_edit
+bash run.sh \
+  --text "Perform a jumping jack." \
+  --output outputs/jumping_jack
+
+.venv/bin/python tools/experimental_reference_edit.py \
+  --source outputs/jumping_jack/motion_final.sps \
+  --instruction "Can you jump higher?" \
+  --text "A person performs a high jumping jack, jumping well above the ground, then returns to standing." \
+  --body lower_body --active-span 8 35 --height-gain-cm 14 \
+  --strength 0.65 --cfg 3 \
+  --output outputs/jump_edit
 ```
 
-The dedicated editor supports relative left/right hand-height edits up to 10 cm on 20 FPS motions of at most 104 frames. It uses its own checkpoint and language adapter. Outputs include `motion_edited.sps`, the interpreted request, the edit mask, and before/after videos. Editing applies reference projection without post-smoothing or IK.
+This example reuses `generator_boundary.pt` for reference-guided editing with a revised caption and Plan. The numerical height target is supplied explicitly and applied during denoising; it is not inferred from the follow-up sentence. `--active-span 8 35` is the zero-based, half-open editing interval for this example. For other source clips, choose an interval containing take-off, flight, and landing while excluding the idle endpoints.
 
-An experimental generator-based editing path reuses `generator_boundary.pt` for source-noised, masked denoising with a revised caption and Plan. Its body scope is supplied explicitly. See [editing examples and supported scopes](docs/REFERENCES_AND_EDITING.md).
+Outputs include `motion_edited.sps` and before/after videos. This jump-height mode preserves endpoint poses and upper-body local joint rotations; root height and leg joints can change. No post-smoothing or external IK is applied to the edited motion.
+
+<details>
+<summary>Optional: render a local before/after overlay</summary>
+
+Render both motions together, with **Before in blue** and **After in translucent orange**:
+
+```bash
+.venv/bin/python tools/render_edit_overlay.py \
+  --edit outputs/jump_edit --output outputs/jump_overlay \
+  --priority before
+```
+
+The synchronized overlay is saved to `outputs/jump_overlay/jump_edit/overlay.mp4`. Overlapping pixels show Before preferentially, without shifting or retiming either motion.
+
+</details>
+
+This generator-based path is experimental. The separate `edit.py` entry point supports trained relative hand-height editing. See [editing examples and supported scopes](docs/REFERENCES_AND_EDITING.md) for both interfaces.
 
 ## Training and data
 
