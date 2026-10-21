@@ -77,17 +77,19 @@ def generate_motion(config, output, device):
     from .motion_io import from_gravity_gauge, write_sps
     models = Path(config['models'])
     standing = config.get('boundary', 'none') == 'standing'
-    state = torch.load(models/('generator_boundary.pt' if standing else 'generator.pt'), map_location='cpu', weights_only=True)
-    if state['format'] != ('boundary_events_v1' if standing else 'sparse_events_v1'):
+    boundary_model = config.get('boundary', 'none') in ('standing', 'free')
+    checkpoint = Path(config.get('generator_checkpoint', models/('generator_boundary.pt' if boundary_model else 'generator.pt')))
+    state = torch.load(checkpoint, map_location='cpu', weights_only=True)
+    if state['format'] != ('boundary_events_v1' if boundary_model else 'sparse_events_v1'):
         raise ValueError('生成器权重格式不匹配')
     from .boundary import BoundaryEventDenoiser, sample_with_boundaries
-    model = (BoundaryEventDenoiser if standing else EventDenoiser)(SMDContinuousDiffusionConfig(**state['model_config']))
+    model = (BoundaryEventDenoiser if boundary_model else EventDenoiser)(SMDContinuousDiffusionConfig(**state['model_config']))
     model.load_state_dict(state['ema'], strict=True)
     del state['ema']
     model = model.to(device).eval()
     diff = SMDGaussianDiffusion(ContinuousDiffusionConfig(
         steps=state['diffusion_config']['steps'], x0_clip=state['diffusion_config']['x0_clip'])).to(device)
-    with np.load(models/'generation_stats.npz', allow_pickle=False) as stats:
+    with np.load(config.get('generation_stats', models/'generation_stats.npz'), allow_pickle=False) as stats:
         mean, std = stats['mean'].astype(np.float32), stats['std'].astype(np.float32)
     if mean.shape != (40,) or std.shape != (40,) or not np.isfinite(mean).all() or not np.isfinite(std).all() or (std <= 0).any():
         raise ValueError('归一化统计量无效')
@@ -99,24 +101,33 @@ def generate_motion(config, output, device):
     conditions = [row[k][None].to(device) for k in names]
     conditions.append(torch.ones(1, n, dtype=torch.bool, device=device))
     if standing:
-        from .motion_io import to_gravity_gauge
+        from .references import boundary_condition, sha256
         width = config.get('boundary_frames',8)
         if n < 2*width+4:
             raise ValueError('预测动作太短，首尾约束后不足一个动作 patch；请减小 --boundary-frames 或增加文本中的动作时长')
-        pose_ref = np.load(models/'standing_pose35.npy',allow_pickle=False)
+        reference_path = Path(config.get('boundary_reference_path', models/'standing_pose35.npy'))
+        if config.get('boundary_reference_sha256') and sha256(reference_path) != config['boundary_reference_sha256']:
+            raise ValueError('Boundary reference changed after request creation')
+        pose_ref = np.load(reference_path,allow_pickle=False)
         if pose_ref.shape != (2,35) or not np.isfinite(pose_ref).all():
             raise ValueError('站姿参考文件无效')
-        reference = torch.from_numpy(np.tile((to_gravity_gauge(pose_ref)[0]-mean)/std,(1,n,1))).float().to(device)
-        known = torch.zeros_like(reference,dtype=torch.bool)
-        known[:,:width] = True
-        known[:,-width:] = True
+        reference, known = boundary_condition(pose_ref, n, width, mean, std)
+        reference = torch.from_numpy(reference).to(device)
+        known = torch.from_numpy(known).to(device)
         batch = dict(zip((*names,'frame_mask'),conditions))
         np.save(output/'boundary_frame_mask.npy',known[0,:,0].cpu().numpy())
+    elif boundary_model:
+        # Disable both the pose-conditioning branch and every projection without
+        # changing weights, semantic conditions, initial noise or DDIM updates.
+        reference = torch.zeros(1, n, 40, device=device)
+        known = torch.zeros_like(reference, dtype=torch.bool)
+        batch = dict(zip((*names, 'frame_mask'), conditions))
+        np.save(output/'boundary_frame_mask.npy', np.zeros(n, dtype=bool))
     # 显式独立随机数发生器，使模型初始化和语言推理不改变动作噪声。
     rng = torch.Generator(device=device).manual_seed(config['seed'])
     context = torch.autocast('cuda', dtype=torch.bfloat16) if config['precision'] == 'bf16' else nullcontext()
     with torch.inference_mode(), context:
-        if standing:
+        if boundary_model:
             x = sample_with_boundaries(model,diff,batch,reference,known,steps=config['steps'],
                 cfg=config['cfg'],generator=rng,precision=config['precision'])
         else:

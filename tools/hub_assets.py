@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Transfer the reviewed release assets through the official ``ms-hub`` CLI.
+"""Download TRACE artifacts through the official ``ms-hub`` CLI.
 
-Install ``modelscope-hub`` separately. Authentication is delegated to its normal
-login flow; this helper never reads credentials or accepts tokens. Uploads are
-dry runs unless both --execute and the manifest's approval flag are present.
+Authentication uses the hub client's normal login flow. Each TRACE artifact is
+verified against its recorded size and SHA-256 before installation.
 """
 
 from __future__ import annotations
@@ -23,11 +22,6 @@ import tempfile
 
 REPO_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*")
 COMPONENT_PATTERN = re.compile(r"[A-Za-z0-9_.-]+")
-METADATA_FILES = {
-    "README.md", "LICENSE", "LICENSE.md", "LICENSE.txt", "LICENSE_PENDING.md",
-    "NOTICE", "NOTICE.md", "THIRD_PARTY_NOTICES.md", "configuration.json",
-    ".gitattributes",
-}
 OFFICIAL_UPSTREAM = {
     "Qwen/Qwen3-4B-Instruct-2507": "models/planner_base",
     "Qwen/Qwen3-Embedding-4B": "models/text_embedding",
@@ -115,8 +109,6 @@ def read_manifest(root: Path) -> dict:
         manifest = json.load(stream)
     if not isinstance(manifest, dict):
         raise AssetError("Manifest must be an object")
-    if type(manifest.get("public_release_approved")) is not bool:
-        raise AssetError("Manifest must contain a boolean public_release_approved")
     artifacts = manifest.get("artifacts")
     if not isinstance(artifacts, list) or not artifacts:
         raise AssetError("Manifest artifacts must be a nonempty list")
@@ -273,62 +265,16 @@ def download(args: argparse.Namespace, root: Path, manifest: dict) -> None:
         print("Upstream snapshots are supplied by the official Qwen repositories; their hashes are not pinned in this release manifest.")
 
 
-def publication_files(root: Path, manifest: dict, repo_type: str) -> list[str]:
-    directory = safe_path(root, "publish/" + ("model" if repo_type == "model" else "data"))
-    expected = {item["path"]: item for item in manifest["artifacts"] if item["repo_type"] == repo_type}
-    files = scan_files(directory)
-    relative_files = [path.relative_to(directory).as_posix() for path in files]
-    for relative in relative_files:
-        if relative not in expected and relative not in METADATA_FILES:
-            raise AssetError(f"Unlisted publication file: {directory / relative}")
-    for relative, artifact in expected.items():
-        verify_file(safe_path(directory, relative), artifact)
-    if "README.md" not in relative_files:
-        raise AssetError(f"Missing repository card: {directory / 'README.md'}")
-    return relative_files
-
-
-def upload(args: argparse.Namespace, root: Path, manifest: dict) -> None:
-    commands = []
-    for repo_type, repo_id, revision, folder in (
-        ("model", args.model_repo, args.model_revision, "model"),
-        ("dataset", args.data_repo, args.data_revision, "data"),
-    ):
-        files = publication_files(root, manifest, repo_type)
-        print(f"{repo_type}: {repo_id}; {len(files)} validated files from publish/{folder}")
-        for name in files:
-            print(f"  {name}")
-        commands.append(["ms-hub", "create", repo_id, "--repo-type", repo_type,
-                         "--visibility", "private", "--exist-ok"])
-        commands.append(["ms-hub", "upload", repo_id, str(root / "publish" / folder),
-                         "--repo-type", repo_type, "--revision", revision,
-                         "--commit-message", "Upload reviewed TRACE release assets",
-                         "--no-cache", "--include", *files])
-    print("New repositories are private; existing repository visibility is unchanged.")
-    if not args.execute or manifest["public_release_approved"] is not True:
-        print("DRY RUN: no repositories created and no files uploaded.")
-        print("Execution requires --execute AND public_release_approved=true after a rights review.")
-        for command in commands:
-            print("Planned: " + shlex.join(command))
-        return
-    for command in commands:
-        run_cli(command)
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for name in ("download", "upload"):
-        command = subparsers.add_parser(name)
-        command.add_argument("--release-dir", type=Path, default=Path(__file__).absolute().parents[1])
-        command.add_argument("--model-repo", required=True, help="Release model repository: owner/name")
-        command.add_argument("--data-repo", required=True, help="Release dataset repository: owner/name")
-        command.add_argument("--model-revision", default="master")
-        command.add_argument("--data-revision", default="master")
-        if name == "download":
-            command.add_argument("--skip-upstream", action="store_true", help="Skip the official Qwen base models")
-        else:
-            command.add_argument("--execute", action="store_true", help="Upload only if the manifest also records release approval")
+    command = subparsers.add_parser("download")
+    command.add_argument("--release-dir", type=Path, default=Path(__file__).absolute().parents[1])
+    command.add_argument("--model-repo", required=True, help="Model repository: owner/name")
+    command.add_argument("--data-repo", required=True, help="Inference-resource repository: owner/name")
+    command.add_argument("--model-revision", default="master")
+    command.add_argument("--data-revision", default="master")
+    command.add_argument("--skip-upstream", action="store_true", help="Skip the official Qwen base models")
     return parser
 
 
@@ -342,10 +288,7 @@ def main(argv: list[str] | None = None) -> int:
         root = Path(os.path.abspath(args.release_dir))
         no_symlinks(root)
         manifest = read_manifest(root)
-        if args.command == "download":
-            download(args, root, manifest)
-        else:
-            upload(args, root, manifest)
+        download(args, root, manifest)
     except (AssetError, OSError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1

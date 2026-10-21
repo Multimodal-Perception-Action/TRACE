@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "purpose": "Documented training recipe; not a runnable trainer configuration",
+  "data": {
+    "split_version": "BONES-SEED V5",
+    "clip_counts": {"train": 84287, "val": 13293, "test": 13302},
+    "window_counts": {"train": 86385, "val": 13799, "test": 13706},
+    "fps": 20,
+    "feature_dim": 40,
+    "max_frames": 512,
+    "normalization_split": "train"
+  },
+  "text_encoder": {
+    "model": "Qwen/Qwen3-Embedding-4B",
+    "frozen": true,
+    "feature_dim": 2560
+  },
+  "planner": {
+    "model": "Qwen/Qwen3-4B-Instruct-2507",
+    "training_rows": 82094,
+    "inner_holdout_rows": 4291,
+    "lora_rank": 32,
+    "lora_alpha": 64,
+    "lora_dropout": 0.05,
+    "target_modules": "all-linear",
+    "epochs": 2,
+    "global_batch": 64,
+    "learning_rate": 0.00005,
+    "warmup_steps": 100,
+    "max_sequence_length": 4096,
+    "precision": "bfloat16"
+  },
+  "model_config": {
+    "feature_dim": 40,
+    "condition_embedding_dim": 2560,
+    "max_condition_tokens": 9,
+    "patch_size": 4,
+    "max_patches": 128,
+    "d_model": 448,
+    "nhead": 8,
+    "layers": 8,
+    "dim_feedforward": 1792,
+    "dropout": 0.1,
+    "condition_dropout": 0.1
+  },
+  "generator_stages": {
+    "text_initialization": {
+      "updates": 32000,
+      "global_batch": 256,
+      "learning_rate": 0.0001,
+      "warmup_steps": 500,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "ema": 0.999,
+      "lambda_ground_penetration": 0.0
+    },
+    "event_continuation": {
+      "updates": 8000,
+      "global_batch": 128,
+      "learning_rate": 0.00002,
+      "warmup_steps": 250,
+      "ema": 0.999,
+      "motion_derived_event_probability": 0.5,
+      "planner_and_text_encoder_frozen": true,
+      "event_channels": 16,
+      "progress_channels": 4,
+      "low_noise_fraction": 0.25
+    }
+  },
+  "event_stage_diffusion_config": {
+    "steps": 1000,
+    "schedule": "cosine",
+    "prediction": "clean_state",
+    "lambda_velocity": 0.5,
+    "lambda_acceleration": 0.1,
+    "lambda_integrated_position": 0.25,
+    "lambda_integrated_yaw": 0.1,
+    "lambda_gravity": 0.25,
+    "lambda_yaw_unit": 0.02,
+    "root_position_scale": 100.0,
+    "x0_clip": 6.0,
+    "fps": 20.0,
+    "contact_height_threshold_m": 0.035,
+    "contact_speed_threshold_mps": 0.2,
+    "contact_ground_quantile": 0.05,
+    "lambda_foot_slip": 0.05,
+    "lambda_foot_anchor": 0.05,
+    "lambda_contact_height": 0.05,
+    "lambda_ground_penetration": 1.0,
+    "penetration_tolerance_m": 0.0,
+    "slip_huber_beta_mps": 0.05,
+    "anchor_huber_beta_m": 0.01,
+    "height_huber_beta_m": 0.01,
+    "anchor_lags": [2, 4, 8],
+    "contact_fp32": true,
+    "penetration_objective": "lowest_sole_l1"
+  },
+  "boundary_continuation": {
+    "updates": 4000,
+    "global_batch": 256,
+    "learning_rate": 0.00002,
+    "ema": 0.999,
+    "reference": "Actual GT boundary fragments",
+    "fragment_widths_frames": [1, 4, 8, 12, 16],
+    "mode_probabilities": {"both": 0.7, "start_only": 0.2, "none": 0.1},
+    "auxiliary_weights": {"boundary_mse": 2.0, "seam_velocity_mse": 1.0, "seam_acceleration_mse": 0.1},
+    "motion_derived_event_probability": 0.5
+  },
+  "dedicated_editor": {
+    "data": "Retargeted MotionFix plus local relative-hand supervision",
+    "max_frames": 104,
+    "independent_weights_and_statistics": true,
+    "diffusion_steps": 300,
+    "ema": 0.99,
+    "relative_offset_scale_m": 0.05,
+    "stages": [
+      {"name": "original_editing", "updates": 8000, "batch": 192, "learning_rate": 0.0001},
+      {"name": "mixed_editing", "updates": 8000, "local_fraction": 0.5},
+      {"name": "relative_goal", "updates": 4000, "batch": 128, "learning_rate": 0.00005},
+      {"name": "event_aware", "updates": 4000, "batch": 128, "learning_rate": 0.00002}
+    ]
+  }
+}

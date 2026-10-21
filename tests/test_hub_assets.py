@@ -30,7 +30,6 @@ class HubAssetsTests(unittest.TestCase):
             ("dataset", "generation_stats.npz"): b"generation statistics",
         }
         self.manifest = {
-            "public_release_approved": False,
             "artifacts": [
                 {
                     "repo_type": repo_type,
@@ -44,11 +43,6 @@ class HubAssetsTests(unittest.TestCase):
             "upstream": [],
         }
         self.write_manifest()
-        for (repo_type, name), payload in self.payloads.items():
-            folder = "model" if repo_type == "model" else "data"
-            self.write("publish/" + folder + "/" + name, payload)
-        self.write("publish/model/README.md", b"Model card")
-        self.write("publish/data/README.md", b"Dataset card")
 
     def write(self, relative, contents):
         path = self.root / relative
@@ -194,12 +188,6 @@ class HubAssetsTests(unittest.TestCase):
         with self.assertRaises(hub.AssetError):
             hub.read_manifest(self.root)
 
-    def test_approval_must_be_boolean(self):
-        self.manifest["public_release_approved"] = "true"
-        self.write_manifest()
-        with self.assertRaises(hub.AssetError):
-            hub.read_manifest(self.root)
-
     def test_symlink_manifest_rejected(self):
         manifest = self.root / "release_manifest.json"
         real = self.root / "real.json"
@@ -263,91 +251,9 @@ class HubAssetsTests(unittest.TestCase):
         self.assertEqual(status, 1, output)
         cli.assert_not_called()
 
-    def test_upload_is_dry_run_by_default(self):
-        with patch.object(hub.subprocess, "run") as cli:
-            status, output = self.invoke("upload")
-        self.assertEqual(status, 0, output)
-        self.assertIn("DRY RUN", output)
-        cli.assert_not_called()
-
-    def test_execute_without_approval_is_still_dry_run(self):
-        with patch.object(hub.subprocess, "run") as cli:
-            status, output = self.invoke("upload", "--execute")
-        self.assertEqual(status, 0, output)
-        self.assertIn("DRY RUN", output)
-        cli.assert_not_called()
-
-    def test_approval_without_execute_is_still_dry_run(self):
-        self.manifest["public_release_approved"] = True
-        self.write_manifest()
-        with patch.object(hub.subprocess, "run") as cli:
-            status, output = self.invoke("upload")
-        self.assertEqual(status, 0, output)
-        cli.assert_not_called()
-
-    def test_approved_upload_commands_are_scoped_and_private(self):
-        self.manifest["public_release_approved"] = True
-        self.write_manifest()
-        with patch.object(hub.subprocess, "run") as cli:
-            status, output = self.invoke("upload", "--execute")
-        self.assertEqual(status, 0, output)
-        self.assertEqual(cli.call_count, 4)
-        commands = [call.args[0] for call in cli.call_args_list]
-        for command in (commands[0], commands[2]):
-            self.assertEqual(command[1], "create")
-            self.assertEqual(command[command.index("--visibility") + 1], "private")
-        for command, folder in ((commands[1], "model"), (commands[3], "data")):
-            self.assertEqual(command[1], "upload")
-            self.assertEqual(command[3], str(self.root / "publish" / folder))
-            self.assertIn("--include", command)
-            self.assertIn("README.md", command)
-            self.assertNotIn("--token", command)
-
-    def test_unlisted_publication_file_fails_before_any_command(self):
-        self.write("publish/data/private_notes.txt", b"do not release")
-        self.manifest["public_release_approved"] = True
-        self.write_manifest()
-        with patch.object(hub.subprocess, "run") as cli:
-            status, output = self.invoke("upload", "--execute")
-        self.assertEqual(status, 1, output)
-        self.assertIn("Unlisted", output)
-        cli.assert_not_called()
-
-    def test_metadata_allowlist_is_root_only(self):
-        self.write("publish/model/planner_adapter/README.md", b"unexpected nested card")
-        with patch.object(hub.subprocess, "run") as cli:
-            status, output = self.invoke("upload")
-        self.assertEqual(status, 1, output)
-        cli.assert_not_called()
-
-    def test_symlink_publication_file_rejected(self):
-        file = self.root / "publish/model/generator.pt"
-        file.unlink()
-        file.symlink_to(self.root / "publish/model/README.md")
-        with patch.object(hub.subprocess, "run") as cli:
-            status, output = self.invoke("upload")
-        self.assertEqual(status, 1, output)
-        cli.assert_not_called()
-
-    def test_symlink_publication_directory_rejected(self):
-        (self.root / "publish/model/leak").symlink_to(self.root, target_is_directory=True)
-        with patch.object(hub.subprocess, "run") as cli:
-            status, output = self.invoke("upload")
-        self.assertEqual(status, 1, output)
-        cli.assert_not_called()
-
-    def test_missing_or_modified_publication_file_rejected(self):
-        file = self.root / "publish/data/generation_stats.npz"
-        for mode in ("modified", "missing"):
-            with self.subTest(mode=mode):
-                if mode == "modified":
-                    file.write_bytes(b"modified")
-                else:
-                    file.unlink()
-                with patch.object(hub.subprocess, "run") as cli:
-                    status, output = self.invoke("upload", "--execute")
-                self.assertEqual(status, 1, output)
-                cli.assert_not_called()
+    def test_only_download_is_exposed(self):
+        with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
+            hub.build_parser().parse_args(["upload"])
 
     def test_missing_cli_explained(self):
         with patch.object(hub.subprocess, "run", side_effect=FileNotFoundError("ms-hub not installed")):

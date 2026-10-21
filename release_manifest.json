@@ -1,13 +1,39 @@
 {
   "schema_version": 1,
-  "public_release_approved": true,
-  "approval_notes": "The project owner confirmed public redistribution of derived models and generated examples on 2026-10-09. Project-owned code and released artifacts use Apache-2.0; third-party training data is excluded.",
   "repositories": {
     "code": "https://github.com/Multimodal-Perception-Action/TRACE",
     "model": "kangzejian/TRACE",
     "dataset": "kangzejian/TRACE-Inference-Assets"
   },
   "artifacts": [
+    {
+      "repo_type": "model",
+      "path": "editor.pt",
+      "destination": "models/editor.pt",
+      "bytes": 147763056,
+      "sha256": "9a00fc867c703f9920ac0aa8f084848101fc17d27c459be849ac1762a991a922"
+    },
+    {
+      "repo_type": "model",
+      "path": "edit_scope_adapter/adapter_config.json",
+      "destination": "models/edit_scope_adapter/adapter_config.json",
+      "bytes": 1105,
+      "sha256": "2d21443867a37cf12b5e2a69d48550b4fa345c671af41471b3a70bc2f2fbcd95"
+    },
+    {
+      "repo_type": "model",
+      "path": "edit_scope_adapter/adapter_model.safetensors",
+      "destination": "models/edit_scope_adapter/adapter_model.safetensors",
+      "bytes": 264308896,
+      "sha256": "d5fa81bd77c60088248149118b637a0956e9b9ecee3081d23985753526cb4962"
+    },
+    {
+      "repo_type": "dataset",
+      "path": "editing_stats.npz",
+      "destination": "models/editing_stats.npz",
+      "bytes": 820,
+      "sha256": "1bacdbdc9c839a468665eeee708d49eac0ba0139dc4d45ff09f5cc681d714886"
+    },
     {
       "repo_type": "model",
       "path": "generator.pt",

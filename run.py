@@ -17,11 +17,16 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2, ensure_ascii=False, allow_nan=False)+'\n', encoding='utf-8')
 
 
-def check_models(models, boundary='standing'):
-    required = ['generator.pt', 'generation_stats.npz', 'planner_adapter/adapter_model.safetensors',
+def check_models(models, boundary='standing', generator_checkpoint=None, generation_stats=None,
+                 custom_both_references=False):
+    models = Path(models).resolve()
+    required = ['planner_adapter/adapter_model.safetensors',
         'planner_adapter/adapter_config.json']
-    if boundary == 'standing':
-        required.extend(['generator_boundary.pt', 'standing_pose35.npy'])
+    if boundary == 'standing' and not custom_both_references:
+        required.append('standing_pose35.npy')
+    required.extend([str(Path(generator_checkpoint).resolve() if generator_checkpoint else
+                         models/('generator_boundary.pt' if boundary in ('standing', 'free') else 'generator.pt')),
+                     str(Path(generation_stats).resolve() if generation_stats else models/'generation_stats.npz')])
     for name in ('planner_base', 'text_embedding'):
         required.extend([f'{name}/config.json', f'{name}/tokenizer.json', f'{name}/tokenizer_config.json',
             f'{name}/model.safetensors.index.json'])
@@ -36,15 +41,16 @@ def check_models(models, boundary='standing'):
 def generate(text, output, models=None, device='cuda:0', seed=42, steps=50, cfg=2.5,
              precision='auto', root_hz=3., joint_hz=4., filter_order=4, cpu_threads=4,
              render=True, render_backend='egl', render_device=0, boundary='standing', boundary_frames=8,
-             contact_refine='heel_toe'):
+             contact_refine='heel_toe', generator_checkpoint=None, generation_stats=None,
+             start_ref=None, end_ref=None, start_frame=0, end_frame=0):
     """Python 工程接口；串行启动子进程，保证每阶段结束后完整释放 GPU 内存。"""
     import torch
     if contact_refine not in ('heel_toe','joint','none'):
         raise ValueError('contact_refine 为 heel_toe/joint/none')
     if contact_refine!='none' and importlib.util.find_spec('mujoco') is None:
         raise RuntimeError('联合修复需要 mujoco；请安装 requirements-render.txt，或 --contact-refine none')
-    if boundary not in ('standing', 'none') or not 1 <= boundary_frames <= 16:
-        raise ValueError('boundary 为 standing/none，boundary_frames 需为 1–16')
+    if boundary not in ('standing', 'free', 'none') or not 1 <= boundary_frames <= 16:
+        raise ValueError('boundary must be standing/free/none; boundary_frames must be 1–16')
     if not isinstance(text, str) or not text.strip():
         raise ValueError('输入文本不能为空')
     if not 1 <= steps <= 1000 or not 0 <= cfg <= 20:
@@ -71,13 +77,35 @@ def generate(text, output, models=None, device='cuda:0', seed=42, steps=50, cfg=
     if precision == 'bf16' and (dev.type != 'cuda' or not torch.cuda.is_bf16_supported()):
         raise ValueError('此设备不支持 BF16，请改用 --precision fp32')
     output, models = Path(output).resolve(), Path(models or ROOT/'models').resolve()
-    check_models(models, boundary)
+    if boundary != 'standing' and (start_ref or end_ref):
+        raise ValueError('Pose references require --boundary standing')
+    generator_checkpoint = Path(generator_checkpoint or models/(
+        'generator_boundary.pt' if boundary in ('standing', 'free') else 'generator.pt')).resolve()
+    generation_stats = Path(generation_stats or models/'generation_stats.npz').resolve()
+    check_models(models, boundary, generator_checkpoint, generation_stats, bool(start_ref and end_ref))
+    from trace_core.references import prepare_references, validate_checkpoint, sha256
+    checkpoint_info = validate_checkpoint(generator_checkpoint, boundary)
+    refs = prepare_references(models/'standing_pose35.npy', start_ref, end_ref,
+                              start_frame, end_frame) if boundary == 'standing' else None
     output.mkdir(parents=True, exist_ok=False)
     config = dict(text=text.strip(), models=str(models), device=str(dev), seed=seed, steps=steps,
         cfg=cfg, precision=precision, root_hz=root_hz, joint_hz=joint_hz,
         filter_order=filter_order, cpu_threads=cpu_threads, render=render,
         render_backend=render_backend, render_device=render_device,
-        boundary=boundary, boundary_frames=boundary_frames, contact_refine=contact_refine)
+        boundary=boundary, boundary_frames=boundary_frames, contact_refine=contact_refine,
+        generator_checkpoint=str(generator_checkpoint), generation_stats=str(generation_stats))
+    save(output/'checkpoint.json', checkpoint_info)
+    if refs is not None:
+        import numpy as np
+        reference_path = output/'boundary_reference_pose35.npy'
+        np.save(reference_path, refs, allow_pickle=False)
+        config.update(boundary_reference_path=str(reference_path),
+                      boundary_reference_sha256=sha256(reference_path))
+        save(output/'boundary_reference_info.json', dict(
+            start=dict(file=Path(start_ref).name if start_ref else 'default', frame=start_frame),
+            end=dict(file=Path(end_ref).name if end_ref else 'default', frame=end_frame),
+            sha256=config['boundary_reference_sha256'],
+            semantics='Local idle posture; absolute world XY/yaw are not constrained'))
     save(output/'request.json', config)
     versions = {name: importlib.metadata.version(name) for name in ('torch', 'transformers', 'peft', 'numpy', 'scipy', 'accelerate')}
     save(output/'environment.json', dict(python=sys.version, packages=versions,
@@ -112,7 +140,7 @@ def generate(text, output, models=None, device='cuda:0', seed=42, steps=50, cfg=
         planner='LLM joint duration and events', gt_used=False, postprocessing=True, ik=contact_refine!='none',
         contact_refine=contact_refine,
         boundary=boundary, boundary_frames=boundary_frames if boundary=='standing' else 0,
-        generator='generator_boundary.pt' if boundary=='standing' else 'generator.pt',
+        generator=generator_checkpoint.name, generator_sha256=checkpoint_info['sha256'],
         rendered=render, video='motion_smoothed.mp4' if render else None,
         preview='index.html' if render else None)
     save(output/'result.json', result)
@@ -129,8 +157,15 @@ def main():
     parser.add_argument('--models', type=Path, default=ROOT/'models')
     parser.add_argument('--device', default='cuda:0')
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--boundary', choices=['standing','none'], default='standing', help='默认首尾双臂下垂站立；none 使用原发布模型')
+    parser.add_argument('--boundary', choices=['standing','free','none'], default='standing',
+                        help='standing: pose references; free: same boundary model without references; none: original generator')
     parser.add_argument('--boundary-frames', type=int, default=8, help='首尾各约束多少帧，默认 8（0.4 秒），范围 1–16')
+    parser.add_argument('--generator-checkpoint', type=Path, help='Compatible TRACE inference checkpoint')
+    parser.add_argument('--generation-stats', type=Path, help='Normalization statistics matched to the checkpoint')
+    parser.add_argument('--start-ref', type=Path, help='Start idle pose: G1 SPS or pose35 NPY')
+    parser.add_argument('--end-ref', type=Path, help='End idle pose, independent of --start-ref')
+    parser.add_argument('--start-frame', type=int, default=0, help='Zero-based pose index in the start reference')
+    parser.add_argument('--end-frame', type=int, default=0, help='Zero-based pose index in the end reference')
     parser.add_argument('--contact-refine', choices=['heel_toe','joint','none'], default='heel_toe', help='默认前后掌标签＋四点联合修复；joint 为旧中心约束；none 仅平滑')
     parser.add_argument('--steps', type=int, default=50)
     parser.add_argument('--cfg', type=float, default=2.5)
@@ -146,7 +181,8 @@ def main():
     parser.add_argument('--stage', choices=['planner', 'embedding', 'diffusion', 'smooth', 'contact'], help=argparse.SUPPRESS)
     a = parser.parse_args()
     if a.check_models:
-        check_models(a.models.resolve(), a.boundary)
+        check_models(a.models.resolve(), a.boundary, a.generator_checkpoint, a.generation_stats,
+                     bool(a.start_ref and a.end_ref))
         print('模型文件齐全')
         return
     if a.stage:
@@ -159,7 +195,9 @@ def main():
     generate(a.text if a.text is not None else a.text_file.read_text(encoding='utf-8'), a.output,
         a.models, a.device, a.seed, a.steps, a.cfg, a.precision, a.root_hz, a.joint_hz, a.filter_order, a.cpu_threads,
         render=not a.skip_render, render_backend=a.render_backend, render_device=a.render_device,
-        boundary=a.boundary, boundary_frames=a.boundary_frames, contact_refine=a.contact_refine)
+        boundary=a.boundary, boundary_frames=a.boundary_frames, contact_refine=a.contact_refine,
+        generator_checkpoint=a.generator_checkpoint, generation_stats=a.generation_stats,
+        start_ref=a.start_ref, end_ref=a.end_ref, start_frame=a.start_frame, end_frame=a.end_frame)
 
 
 if __name__ == '__main__':
