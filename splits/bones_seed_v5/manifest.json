@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "fields": [
+    "filename"
+  ],
+  "counts": {
+    "train": 84287,
+    "val": 13293,
+    "test": 13302
+  },
+  "total": 110882,
+  "source_sha256": {
+    "train": "0f5ba2ea72084064bec7bde95d0b053cdcd2c165bd036ad4d9ab44de35ed7dc5",
+    "val": "42ca25dcb0ffd36501dba6c88b14576ec3ec08cfbfc3a3f8614539262897aae3",
+    "test": "e90dd006b37fd66e2c8e16488754ebc0bd3d8bde45c8183e1ac72cbd83014dc9"
+  },
+  "sha256": {
+    "train": "4698675f8d43b9008f4fc0e92c49ec72bdd63f0d70b752f4b34cb61126117940",
+    "val": "e7301be9cef8ff7c6535b3754886e0848401addeded3e6341ae0e259ed3ec4f8",
+    "test": "96748a1f452c630866f4d11a9478ea5ea219d2c4fa51401f36ec7aef868616dd"
+  },
+  "source_order_preserved": true,
+  "unique_filenames": true,
+  "cross_split_mirror_groups": 0,
+  "includes_motions": false,
+  "includes_captions_or_actor_metadata": false
+}

@@ -99,6 +99,8 @@ An experimental generator-based editing path reuses `generator_boundary.pt` for 
 
 Obtain motion files and annotations from the dataset provider under its license. Split lists contain filenames only, with no motion arrays, captions, or actor metadata.
 
+The paper's V5 split lists are included: [train](splits/bones_seed_v5/train.jsonl) (84,287), [validation](splits/bones_seed_v5/val.jsonl) (13,293), and [test](splits/bones_seed_v5/test.jsonl) (13,302). See [split usage](splits/bones_seed_v5/README.md) to match these filenames to your local data.
+
 ## Tests
 
 ```bash

@@ -2,7 +2,7 @@
 
 ## What the split lists contain
 
-The three files `train.jsonl`, `val.jsonl`, and `test.jsonl` identify the motions in each split. Each row has exactly one field:
+The included [train.jsonl](../splits/bones_seed_v5/train.jsonl), [val.jsonl](../splits/bones_seed_v5/val.jsonl), and [test.jsonl](../splits/bones_seed_v5/test.jsonl) identify the motions in each split. Each row has exactly one field:
 
 ```json
 {"filename": "example_motion__A001.sps"}
@@ -26,11 +26,11 @@ Temporal annotations are matched to the exact original or mirrored filename; lef
 
 ## Match the lists to local motions
 
-Place the three filename lists in a local directory, then run:
+From the repository root, match the included lists to your local dataset:
 
 ```bash
 python tools/dataset_splits.py resolve \
-  --splits /path/to/v5_splits \
+  --splits splits/bones_seed_v5 \
   --motion-root /path/to/seed/g1/sps_20fps \
   --output-dir data/v5_resolved
 ```
