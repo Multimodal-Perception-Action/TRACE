@@ -12,9 +12,9 @@ Motion-derived events supervise the language planner during training. At inferen
 
 ## Real-robot demonstrations
 
-[![Real-robot demonstrations](media/real_robot_demo.jpg)](media/real_robot_demo.mp4)
+https://github.com/user-attachments/assets/1f0f6ceb-45ab-4081-8231-8107b6f23058
 
-[Watch the video](media/real_robot_demo.mp4): jumping-jack editing, in-the-wild instructions, and dance examples. Physical execution uses a downstream controller.
+Jumping-jack editing, in-the-wild instructions, and dance examples. Physical execution uses a downstream controller. [Download MP4](media/real_robot_demo.mp4).
 
 ## Installation
 
