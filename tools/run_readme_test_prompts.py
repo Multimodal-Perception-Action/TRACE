@@ -27,8 +27,8 @@ CASES = [
 def prepare(output):
     output.mkdir(parents=True, exist_ok=True)
     (output/"logs").mkdir(exist_ok=True)
-    reference = ROOT/"models/standing_pose35.npy"
-    local_reference = output/"idle_pose35.npy"
+    reference = ROOT/"examples/poses/idle_start.sps"
+    local_reference = output/"idle.sps"
     manifest = dict(
         cases=CASES,
         prompt_source="README.md > Real-robot demonstrations > Test prompts segment (06_test.mp4)",
@@ -66,8 +66,8 @@ def generation_command(output, case, gpu, boundary="standing"):
     ]
     if boundary == "standing":
         command += [
-            "--start-ref", str(output/"idle_pose35.npy"),
-            "--end-ref", str(output/"idle_pose35.npy"),
+            "--start-ref", str(output/"idle.sps"),
+            "--end-ref", str(output/"idle.sps"),
         ]
     return command
 

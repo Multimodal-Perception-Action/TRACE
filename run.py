@@ -23,7 +23,8 @@ def check_models(models, boundary='standing', generator_checkpoint=None, generat
     required = ['planner_adapter/adapter_model.safetensors',
         'planner_adapter/adapter_config.json']
     if boundary == 'standing' and not custom_both_references:
-        required.append('standing_pose35.npy')
+        required.extend(str(ROOT/'examples/poses'/name)
+                        for name in ('idle_start.sps', 'idle_end.sps'))
     required.extend([str(Path(generator_checkpoint).resolve() if generator_checkpoint else
                          models/('generator_boundary.pt' if boundary in ('standing', 'free') else 'generator.pt')),
                      str(Path(generation_stats).resolve() if generation_stats else models/'generation_stats.npz')])
@@ -83,9 +84,11 @@ def generate(text, output, models=None, device='cuda:0', seed=42, steps=50, cfg=
         'generator_boundary.pt' if boundary in ('standing', 'free') else 'generator.pt')).resolve()
     generation_stats = Path(generation_stats or models/'generation_stats.npz').resolve()
     check_models(models, boundary, generator_checkpoint, generation_stats, bool(start_ref and end_ref))
-    from trace_core.references import prepare_references, validate_checkpoint, sha256
+    from trace_core.references import prepare_references, validate_checkpoint, sha256, resolve_idle_references
     checkpoint_info = validate_checkpoint(generator_checkpoint, boundary)
-    refs = prepare_references(models/'standing_pose35.npy', start_ref, end_ref,
+    if boundary == 'standing':
+        start_ref, end_ref = resolve_idle_references(start_ref, end_ref)
+    refs = prepare_references(None, start_ref, end_ref,
                               start_frame, end_frame) if boundary == 'standing' else None
     output.mkdir(parents=True, exist_ok=False)
     config = dict(text=text.strip(), models=str(models), device=str(dev), seed=seed, steps=steps,
@@ -162,8 +165,8 @@ def main():
     parser.add_argument('--boundary-frames', type=int, default=8, help='首尾各约束多少帧，默认 8（0.4 秒），范围 1–16')
     parser.add_argument('--generator-checkpoint', type=Path, help='Compatible TRACE inference checkpoint')
     parser.add_argument('--generation-stats', type=Path, help='Normalization statistics matched to the checkpoint')
-    parser.add_argument('--start-ref', type=Path, help='Start idle pose: G1 SPS or pose35 NPY')
-    parser.add_argument('--end-ref', type=Path, help='End idle pose, independent of --start-ref')
+    parser.add_argument('--start-ref', type=Path, help='Start idle pose; defaults to examples/poses/idle_start.sps')
+    parser.add_argument('--end-ref', type=Path, help='End idle pose; defaults to examples/poses/idle_end.sps')
     parser.add_argument('--start-frame', type=int, default=0, help='Zero-based pose index in the start reference')
     parser.add_argument('--end-frame', type=int, default=0, help='Zero-based pose index in the end reference')
     parser.add_argument('--contact-refine', choices=['heel_toe','joint','none'], default='heel_toe', help='默认前后掌标签＋四点联合修复；joint 为旧中心约束；none 仅平滑')

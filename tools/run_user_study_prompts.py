@@ -44,7 +44,7 @@ def prepare(output, survey, comparison, boundary="standing"):
     cases = load_cases(survey, comparison)
     output.mkdir(parents=True, exist_ok=True)
     (output/"logs").mkdir(exist_ok=True)
-    reference = ROOT/"models/standing_pose35.npy"
+    reference = ROOT/"examples/poses/idle_start.sps"
     manifest = dict(
         cases=cases, cohort="original_user_study_standard_10",
         survey_source=str(survey), survey_source_sha256=sha256(survey),
@@ -61,7 +61,7 @@ def prepare(output, survey, comparison, boundary="standing"):
         physical_robot_rollout=False, all_requested_cases_retained=True,
         note="Fresh visualization of the same prompts, not new human-study scores.",
     )
-    local_reference = output/"idle_pose35.npy"
+    local_reference = output/"idle.sps"
     if (output/"manifest.json").exists():
         if json.loads((output/"manifest.json").read_text()) != manifest:
             raise ValueError("Existing manifest differs; use a new directory")

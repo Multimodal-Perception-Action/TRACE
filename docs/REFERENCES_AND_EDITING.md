@@ -9,12 +9,13 @@ bash run.sh \
   --text "A person stands and waves the right hand." \
   --generator-checkpoint models/generator_boundary.pt \
   --generation-stats models/generation_stats.npz \
-  --start-ref my_start.sps --start-frame 0 \
-  --end-ref my_end.sps --end-frame -1 \
+  --start-ref examples/poses/idle_start.sps --start-frame 0 \
+  --end-ref examples/poses/idle_end.sps --end-frame 0 \
   --output outputs/custom_idle
 ```
 
-Each reference is optional; an omitted side uses its distributed default idle pose.
+Each reference is optional; an omitted side uses the corresponding bundled SPS
+in `examples/poses/`.
 The files can be different, or can point to different frames of one recording.
 References are copied into the new output directory as `boundary_reference_pose35.npy`;
 the input files and default pose are never overwritten.
@@ -35,19 +36,11 @@ The generation workflow protects the idle bands during smoothing and contact ref
 Use `--contact-refine none` to inspect boundary conditioning with smoothing only.
 `motion_raw.sps` is the diffusion output before smoothing or contact refinement.
 
-For a self-contained example, create two synthetic references from the distributed idle:
-
-```bash
-.venv/bin/python tools/create_idle_examples.py
-bash run.sh \
-  --text "A person stands and waves the right hand." \
-  --start-ref outputs/idle_examples/idle_start.sps \
-  --end-ref outputs/idle_examples/idle_end.sps \
-  --output outputs/two_idle_poses
-```
-
-The example end pose bends both elbows to 45 degrees to make the two references
-visibly different. No private capture recording is used.
+The repository includes ready-to-use [start](../examples/poses/idle_start.sps)
+and [end](../examples/poses/idle_end.sps) SPS references. Both contain the same
+single-frame idle posture. They can be replaced independently, and need no
+additional download. They are also the default references when no pose arguments
+are supplied. Custom reference arguments do not change the model assets.
 
 ## Compatible generation checkpoints
 
@@ -256,9 +249,9 @@ inference is not a claim that every requested edit succeeded.
 
 ### Jump-height targets during exploratory resampling
 
-Text-only reference resampling did not increase the jump in the W04 / WE08
-celebration example. `--height-gain-cm` adds explicit, inference-time numerical
-guidance to that experimental path. It is separate from the trained hand editor.
+`--height-gain-cm` adds an explicit jump-height target to experimental reference
+resampling. It is inference-time numerical guidance, separate from the trained
+hand editor.
 
 The guidance detects a source flight apex with differentiable G1 sole FK,
 constructs a higher clearance envelope, and optimizes clean predictions during
@@ -269,11 +262,11 @@ Source root orientation, horizontal travel, waist, arms, and all frames outside
 the active interval remain exact. Height targets are soft optimization goals;
 achieved heights must be measured from the decoded motion.
 
-For the existing celebration source:
+For a source containing a jump:
 
 ```bash
 .venv/bin/python tools/experimental_reference_edit.py \
-  --source outputs/wild_edits_20261020/edits/WE08/source.sps \
+  --source /path/to/source_jump.sps \
   --instruction "Jump higher while keeping the arm gesture." \
   --text "A person celebrates good news by raising both arms and jumping high above the ground." \
   --body lower_body --active-span 8 36 --height-gain-cm 14 \
@@ -286,13 +279,9 @@ an interval covering preparation, flight and landing. This option requires an
 existing source jump and the boundary-compatible generator checkpoint. It does
 not create a trained general-language jump editor.
 
-The inspected `G14_v2` trial in `outputs/jump_edit_optimization_20261020/`
-increased the minimum height of all eight sole points from 7.73 cm to 22.75 cm
-at the apex. Root peak height increased from 90.49 cm to 100.27 cm. The preceding
-unsuccessful edit reached 4.17 cm sole clearance. All measurements use the same
-fixed ground plane; no per-motion height alignment is applied. The selected
-output has no leg joint-limit violations, and its maximum sole penetration is
-2.51 mm. These are kinematic checks, not simulator or controller validation.
+Measure sole clearance, root peak height, joint limits, and penetration on the
+decoded source and edited motion using the same fixed ground plane. These
+kinematic checks do not replace simulator or controller validation.
 
 `tools/optimize_jump_demo.py` retains the sampling sweep and numerical-guidance
 trials. `tools/review_jump_edit.py` renders original / previous / improved

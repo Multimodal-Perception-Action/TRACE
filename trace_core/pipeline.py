@@ -105,7 +105,9 @@ def generate_motion(config, output, device):
         width = config.get('boundary_frames',8)
         if n < 2*width+4:
             raise ValueError('预测动作太短，首尾约束后不足一个动作 patch；请减小 --boundary-frames 或增加文本中的动作时长')
-        reference_path = Path(config.get('boundary_reference_path', models/'standing_pose35.npy'))
+        if not config.get('boundary_reference_path'):
+            raise ValueError('Missing boundary reference snapshot; create a new request with run.py to use the bundled idle SPS')
+        reference_path = Path(config['boundary_reference_path'])
         if config.get('boundary_reference_sha256') and sha256(reference_path) != config['boundary_reference_sha256']:
             raise ValueError('Boundary reference changed after request creation')
         pose_ref = np.load(reference_path,allow_pickle=False)

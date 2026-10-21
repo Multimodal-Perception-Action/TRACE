@@ -1,8 +1,8 @@
-# BONES-SEED V5 data splits
+# BONES-SEED data preparation
 
 ## What the split lists contain
 
-The included [train.jsonl](../splits/bones_seed_v5/train.jsonl), [val.jsonl](../splits/bones_seed_v5/val.jsonl), and [test.jsonl](../splits/bones_seed_v5/test.jsonl) identify the motions in each split. Each row has exactly one field:
+The included [train.jsonl](../splits/bones_seed/train.jsonl), [val.jsonl](../splits/bones_seed/val.jsonl), and [test.jsonl](../splits/bones_seed/test.jsonl) identify the motions in each split. Each row has exactly one field:
 
 ```json
 {"filename": "example_motion__A001.sps"}
@@ -16,13 +16,16 @@ The example name above is illustrative. Filenames retain their extension and mir
 | Validation | 6,650 | 6,643 | 13,293 |
 | Test | 6,653 | 6,649 | 13,302 |
 
-These are clip counts before training-window segmentation. The processed generator cache contains 86,385 training, 13,799 validation, and 13,706 test windows. Do not substitute window counts for original-clip evaluation counts.
+These are clip counts before training-window segmentation.
 
-## Split construction
+## Cleaning and preprocessing
 
-V5 retains the prior data filtering and includes available original sagittal mirrors. Connected components join prior motion groups with mirror families and exact clip-level captions before assigning splits. Original/mirrored pairs remain in the same split. Missing mirrors are not synthesized. General phrases in temporal annotations are not used as grouping keys.
+1. Use the Unitree G1 joint order and consistent coordinates at 20 FPS. Remove invalid non-root translation fields; retain root translation and joint rotations.
+2. Match motions and annotations by filename, including mirror suffixes. Check file completeness and alignment before building training windows.
+3. Keep related clips, original/mirrored pairs, and exact clip-level caption groups in the same partition. Use the provided lists to reproduce the split.
+4. Divide long clips into windows of at most 512 frames, retaining their source split. Compute normalization statistics from the training set only.
 
-Temporal annotations are matched to the exact original or mirrored filename; left/right words are not blindly swapped. The filename-only export preserves the existing split membership and order rather than generating a new random split.
+Available mirrored motions use their own annotations; missing mirrors are not synthesized and left/right text is not blindly swapped. General phrases in temporal annotations are not used as grouping keys. The published lists preserve the paper's split membership and row order.
 
 ## Match the lists to local motions
 
@@ -30,23 +33,13 @@ From the repository root, match the included lists to your local dataset:
 
 ```bash
 python tools/dataset_splits.py resolve \
-  --splits splits/bones_seed_v5 \
+  --splits splits/bones_seed \
   --motion-root /path/to/seed/g1/sps_20fps \
-  --output-dir data/v5_resolved
+  --output-dir data/resolved
 ```
 
 The resolver searches recursively and writes the corresponding motion paths relative to `--motion-root`. Missing files, duplicate basenames, cross-split duplication, and mirror pairs crossing splits cause an error. Existing output directories are never overwritten.
 
 For the provider's CSV archive, add `--motion-suffix .csv` and point `--motion-root` to its G1 CSV directory. Matching by stem only locates the file; it does not convert coordinates, resample, or reproduce the 20 FPS training representation.
 
-## Export filename-only lists from existing V5 manifests
-
-```bash
-python tools/dataset_splits.py export \
-  --source-dir /path/to/data_path_v5 \
-  --output-dir data/v5_splits
-```
-
-Only the basename of `filepath` is retained. `manifest.json` records counts and SHA-256 checksums, with no source paths. The command does not copy or upload any dataset content.
-
-For training, join the lists to locally licensed motions and annotations, then follow [TRAINING.md](TRAINING.md). Compute normalization statistics from the training split only.
+`manifest.json` records counts and SHA-256 checksums. For training, join the lists to locally licensed motions and annotations, then follow [TRAINING.md](TRAINING.md).

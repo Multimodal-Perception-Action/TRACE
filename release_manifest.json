@@ -71,13 +71,6 @@
     },
     {
       "repo_type": "dataset",
-      "path": "standing_pose35.npy",
-      "destination": "models/standing_pose35.npy",
-      "bytes": 408,
-      "sha256": "d795b72cd4dfe0b74519afcf4f74cb164c315c79337da7eaef8ce33a8a726ce8"
-    },
-    {
-      "repo_type": "dataset",
       "path": "example_prompts.jsonl",
       "destination": "data/example_prompts.jsonl",
       "bytes": 372,

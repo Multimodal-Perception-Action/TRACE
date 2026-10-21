@@ -2,7 +2,8 @@
   "schema_version": 1,
   "purpose": "Documented training recipe; not a runnable trainer configuration",
   "data": {
-    "split_version": "BONES-SEED V5",
+    "dataset": "BONES-SEED",
+    "split_directory": "splits/bones_seed",
     "clip_counts": {"train": 84287, "val": 13293, "test": 13302},
     "window_counts": {"train": 86385, "val": 13799, "test": 13706},
     "fps": 20,

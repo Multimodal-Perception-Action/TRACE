@@ -4,7 +4,7 @@ This guide records the training stages for TRACE's language planner, motion gene
 
 ## 1. Prepare motions and text
 
-Obtain BONES-SEED motions and annotations from the provider and match them to the filename-only V5 lists as described in [DATA.md](DATA.md). The lists identify membership in train/validation/test; captions must be joined from the locally obtained annotations.
+Obtain BONES-SEED motions and annotations from the provider and match them to the filename-only split lists as described in [DATA.md](DATA.md). The lists identify membership in train/validation/test; captions must be joined from the locally obtained annotations.
 
 1. Use the Unitree G1 skeleton, consistent joint order, coordinate conventions, and 20 FPS sampling. Match each mirrored motion to its own annotation.
 2. Segment long clips into windows of at most 512 frames without changing the source clip's split. Preserve the filename and window boundaries in the local cache.

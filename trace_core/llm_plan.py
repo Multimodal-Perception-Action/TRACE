@@ -1,4 +1,4 @@
-# 本模块由当前推理实现抽取；仅整理依赖和中文注释，计算逻辑保持一致。
+"""Language planning prompts and sparse-event serialization."""
 import json
 import math
 import numpy as np

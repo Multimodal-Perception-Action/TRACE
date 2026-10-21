@@ -69,8 +69,8 @@ class UserStudyRunnerTests(unittest.TestCase):
     def test_standing_mode_keeps_both_references(self):
         command = generation_command(Path("/tmp/review"), dict(id="test", text="Walk"), 2)
         self.assertEqual(command[command.index("--boundary")+1], "standing")
-        self.assertEqual(command[command.index("--start-ref")+1], "/tmp/review/idle_pose35.npy")
-        self.assertEqual(command[command.index("--end-ref")+1], "/tmp/review/idle_pose35.npy")
+        self.assertEqual(command[command.index("--start-ref")+1], "/tmp/review/idle.sps")
+        self.assertEqual(command[command.index("--end-ref")+1], "/tmp/review/idle.sps")
 
     def test_refuses_to_swap_to_original_checkpoint(self):
         with self.assertRaisesRegex(ValueError, "same model"):

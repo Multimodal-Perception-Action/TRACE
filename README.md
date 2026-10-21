@@ -2,7 +2,7 @@
 
 **Typed Reference-Aware Conversational Editing for Humanoid Motion Diffusion**
 
-[Paper](https://arxiv.org/abs/2610.21515) · [PDF](https://arxiv.org/pdf/2610.21515) · [Models](https://modelscope.cn/models/kangzejian/TRACE) · [Inference assets](https://modelscope.cn/datasets/kangzejian/TRACE-Inference-Assets) · [Training](docs/TRAINING.md)
+[arXiv](https://arxiv.org/abs/2610.21515) · [PDF](https://arxiv.org/pdf/2610.21515) · [Models](https://modelscope.cn/models/kangzejian/TRACE) · [Inference assets](https://modelscope.cn/datasets/kangzejian/TRACE-Inference-Assets) · [Training](docs/TRAINING.md) · [Citation](#citation)
 
 TRACE generates and edits Unitree G1 humanoid motion from language. An LLM predicts duration and sparse motion events; a diffusion Transformer combines this time-aligned Plan with the original text to generate a continuous trajectory. Reference-aware editing changes selected motion components while preserving local joint rotations outside the editing scope.
 
@@ -54,6 +54,8 @@ The output directory must be new. The default pipeline is:
 
 `text → LLM Plan + text embedding → boundary-conditioned diffusion → smoothing → heel/toe refinement → SPS + video`
 
+By default, both endpoints use the bundled [start](examples/poses/idle_start.sps) and [end](examples/poses/idle_end.sps) idle references. These are the same posture. No extra reference arguments are needed for the walking example above.
+
 - `motion_final.sps`: final 20 FPS motion for downstream use.
 - `motion_raw.sps`: diffusion output before postprocessing.
 - `pose35_final.npy`, `motion_final_qpos.npz`: array exports.
@@ -69,12 +71,14 @@ Useful options:
 
 ### Custom start and end poses
 
+Ready-to-use SPS references are included: [start pose](examples/poses/idle_start.sps) and [end pose](examples/poses/idle_end.sps). Both contain the same single-frame G1 idle pose; replace either file to use different endpoints.
+
 ```bash
 bash run.sh \
   --text "A person stands and waves the right hand." \
   --generator-checkpoint models/generator_boundary.pt \
-  --start-ref start.sps --start-frame 0 \
-  --end-ref end.sps --end-frame 0 \
+  --start-ref examples/poses/idle_start.sps --start-frame 0 \
+  --end-ref examples/poses/idle_end.sps --end-frame 0 \
   --output outputs/custom_idle
 ```
 
@@ -95,16 +99,29 @@ An experimental generator-based editing path reuses `generator_boundary.pt` for 
 
 ## Training and data
 
-[Training guide](docs/TRAINING.md) covers data preparation, event supervision, language-planner training, diffusion training, boundary fine-tuning, and the independent editor. [Dataset guide](docs/DATA.md) explains the filename-only BONES-SEED V5 split format and how to match it to locally obtained data. The repository provides the training recipe and configuration; standalone generator/editor training entry points are not yet included.
+[Training guide](docs/TRAINING.md) covers data preparation, event supervision, language-planner training, diffusion training, boundary fine-tuning, and the independent editor. [Dataset guide](docs/DATA.md) summarizes data cleaning and explains how to match the filename-only BONES-SEED splits to locally obtained data. The repository provides the training recipe and configuration; standalone generator/editor training entry points are not yet included.
 
 Obtain motion files and annotations from the dataset provider under its license. Split lists contain filenames only, with no motion arrays, captions, or actor metadata.
 
-The paper's V5 split lists are included: [train](splits/bones_seed_v5/train.jsonl) (84,287), [validation](splits/bones_seed_v5/val.jsonl) (13,293), and [test](splits/bones_seed_v5/test.jsonl) (13,302). See [split usage](splits/bones_seed_v5/README.md) to match these filenames to your local data.
+The paper's split lists are included: [train](splits/bones_seed/train.jsonl) (84,287), [validation](splits/bones_seed/val.jsonl) (13,293), and [test](splits/bones_seed/test.jsonl) (13,302). See [split usage](splits/bones_seed/README.md) to match these filenames to your local data.
 
 ## Tests
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
+```
+
+## Citation
+
+If you use TRACE in your research, please cite our paper. [Download BibTeX](CITATION.bib).
+
+```bibtex
+@article{kang2026trace,
+  title={TRACE: Typed Reference-Aware Conversational Editing for Humanoid Motion Diffusion},
+  author={Kang, Zejian and Luo, Yifu and Shen, Boyang and Li, Jingxuan and Chen, Zekai and Shi, Zekun and Xu, Yongxue and Hou, Zhenyu and Wu, Bingqian and Zhang, Shaolei and others},
+  journal={arXiv preprint arXiv:2610.21515},
+  year={2026}
+}
 ```
 
 ## License

@@ -7,6 +7,13 @@ import numpy as np
 from .motion_io import SPS_JOINTS, convert_to_35dim, parse_sps_file, to_gravity_gauge
 
 
+def resolve_idle_references(start=None, end=None):
+    """Use the bundled idle SPS for each omitted endpoint independently."""
+    directory = Path(__file__).resolve().parents[1] / "examples/poses"
+    return (Path(start) if start is not None else directory / "idle_start.sps",
+            Path(end) if end is not None else directory / "idle_end.sps")
+
+
 def sha256(path):
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:

@@ -1,4 +1,4 @@
-# 本模块由当前推理实现抽取；仅整理依赖和中文注释，计算逻辑保持一致。
+"""Frozen text-feature extraction for motion conditioning."""
 from __future__ import annotations
 from typing import Any, Sequence
 from contextlib import nullcontext

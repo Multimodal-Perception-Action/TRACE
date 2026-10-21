@@ -18,10 +18,11 @@ These checkpoints are inference exports, not optimizer state. Use only trusted a
 
 - `generation_stats.npz` → `models/generation_stats.npz`: training-set mean/std for the 40D representation.
 - `editing_stats.npz` → `models/editing_stats.npz`: the editor's own normalization; do not substitute generation statistics.
-- `standing_pose35.npy` → `models/standing_pose35.npy`: two identical analytically constructed, FK-grounded standing poses with arms down. This is not a motion-capture clip.
 - `example_prompts.jsonl` → `data/example_prompts.jsonl`: three newly authored generic prompts with no paired motion and no evaluation labels.
 
 These inference assets do not contain training motions or captions. Filename-only training/validation/test lists are described separately in [DATA.md](DATA.md).
+
+Ready-to-use single-frame [start and end SPS references](../examples/poses/README.md) are included in the code repository and selected by default. Use `--start-ref` and `--end-ref` to supply different poses.
 
 ## Official upstream downloads
 

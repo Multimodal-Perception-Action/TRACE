@@ -1,6 +1,6 @@
-# BONES-SEED V5 split lists
+# BONES-SEED split lists
 
-These are the filename-only train, validation, and test lists used by TRACE. They preserve the original V5 split membership and row order.
+These are the filename-only train, validation, and test lists used by TRACE. They preserve the paper's split membership and row order.
 
 | Split | File | Clips |
 | --- | --- | ---: |
@@ -24,9 +24,9 @@ Run from the TRACE repository root:
 
 ```bash
 python tools/dataset_splits.py resolve \
-  --splits splits/bones_seed_v5 \
+  --splits splits/bones_seed \
   --motion-root /path/to/seed/g1/sps_20fps \
-  --output-dir data/v5_resolved
+  --output-dir data/resolved
 ```
 
 The resolver checks missing files, ambiguous basenames, duplicate membership, and cross-split mirror families. For provider CSV files, add `--motion-suffix .csv`; filename matching does not perform motion conversion. See the [data guide](../../docs/DATA.md) for preprocessing and split-construction details.

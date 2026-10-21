@@ -1,4 +1,4 @@
-# 本模块由当前推理实现抽取；仅整理依赖和中文注释，计算逻辑保持一致。
+"""G1 motion representations, coordinate conversion, and SPS I/O."""
 from __future__ import annotations
 import re
 from pathlib import Path
